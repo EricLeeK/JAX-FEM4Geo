@@ -51,14 +51,14 @@ FEM 仿真和验证驱动程序均使用完全相同的材料参数：
 ### 3.2 可视化比较
 两种方法的应力-应变曲线在下图叠加显示。
 
-![对比图](comparison_plot.png)
+![对比图](/home/ericleek/fem-jax-geo/results/2025-12-22_verification/comparison_plot.png)
 *(见 `study-fold/comparison_plot.png`)*
 
 FEM 数据点（蓝色圆圈）与验证驱动程序曲线（红线）完美对齐，验证了在弹性阶段和塑性阶段（包括由于顶点正则化导致的屈服处平滑过渡）实现的正确性。
 
 ### 3.3 原始数据文件
-*   **FEM 结果：** `study-fold/fem_data.csv`
-*   **验证结果：** `study-fold/verification_data.csv`
+*   **FEM 结果：** `/home/ericleek/fem-jax-geo/results/2025-12-22_verification/fem_data.csv`
+*   **验证结果：** `/home/ericleek/fem-jax-geo/results/2025-12-22_verification/verification_data.csv`
 
 ## 4. 可微性验证与稳定性分析
 

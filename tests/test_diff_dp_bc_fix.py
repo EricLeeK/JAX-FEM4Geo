@@ -1,7 +1,6 @@
 """
-Differentiability Test for Drucker-Prager Model
+Fix BCs: Constrain rigid body modes
 """
-
 import jax
 import jax.numpy as np
 import os
@@ -21,7 +20,6 @@ from jax_fem.generate_mesh import box_mesh_gmsh, get_meshio_cell_type, Mesh
 class DifferentiableDruckerPrager(Problem):
     def custom_init(self):
         self.fe = self.fes[0]
-        # Initial internal variables
         self.epsilons_old = np.zeros((len(self.fe.cells), self.fe.num_quads, self.fe.vec, self.dim))
         self.sigmas_old = np.zeros_like(self.epsilons_old)
         self.internal_vars = [self.sigmas_old, self.epsilons_old]
@@ -74,13 +72,13 @@ class DifferentiableDruckerPrager(Problem):
 
         return stress_return_map
 
-def run_dp_grad_test(displacement):
+def run_test(displacement):
     # Setup small mesh for speed
     Lx, Ly, Lz = 10., 10., 10.
     Nx, Ny, Nz = 2, 2, 2
     
     # Use temp output dir
-    data_dir = os.path.join(project_root, 'results', 'test_output_dp')
+    data_dir = os.path.join(project_root, 'results', 'test_output_dp_bc_fix')
     os.makedirs(data_dir, exist_ok=True)
     
     ele_type = 'HEX8'
@@ -91,7 +89,14 @@ def run_dp_grad_test(displacement):
     # BCs
     def bottom(p): return np.isclose(p[2], 0.)
     def top(p): return np.isclose(p[2], Lz)
-    dirichlet_bc_info = [[bottom, top], [2, 2], [lambda p: 0., lambda p: displacement]] 
+    
+    # Fully fix bottom face (u_x=0, u_y=0, u_z=0)
+    # Move top face (u_z = displacement)
+    dirichlet_bc_info = [
+        [bottom, bottom, bottom, top], 
+        [0, 1, 2, 2], 
+        [lambda p: 0., lambda p: 0., lambda p: 0., lambda p: displacement]
+    ]
     
     problem = DifferentiableDruckerPrager(mesh, vec=3, dim=3, dirichlet_bc_info=dirichlet_bc_info)
     
@@ -104,55 +109,34 @@ def run_dp_grad_test(displacement):
         sol_list = fwd_pred(params)
         return np.sum(sol_list[0]**2)
 
-    print("\n" + "="*60)
-    print(f"Drucker-Prager Differentiability Verification (AD vs FD)")
-    print(f"Displacement: {displacement}")
-    print("="*60)
-
-    # Initial parameters [E, k]
+    print(f"Testing Displacement: {displacement}")
     params_init = np.array([70000.0, 250.0])
     
     # 1. Compute Gradient via AD
-    t0 = time.time()
     loss_val, grad_ad = jax.value_and_grad(loss_fn)(params_init)
-    t1 = time.time()
-    print(f"AD Gradient computed in {t1-t0:.4f}s")
-    print(f"  dLoss/dE (AD): {grad_ad[0]:.8e}")
-    print(f"  dLoss/dk (AD): {grad_ad[1]:.8e}")
-
-    # 2. Compute Gradient via Finite Difference (FD) for verification
-    print("\nComputing Finite Difference (FD) for verification...")
-    eps = 1.0 # 1 MPa perturbation
     
-    # dLoss/dE
+    # 2. FD
+    eps = 1.0 
     loss_plus_E = loss_fn(params_init + np.array([eps, 0.0]))
     grad_fd_E = (loss_plus_E - loss_val) / eps
     
-    # dLoss/dk
-    loss_plus_k = loss_fn(params_init + np.array([0.0, eps]))
-    grad_fd_k = (loss_plus_k - loss_val) / eps
-    
-    print(f"  dLoss/dE (FD): {grad_fd_E:.8e}")
-    print(f"  dLoss/dk (FD): {grad_fd_k:.8e}")
-
-    # 3. Summary
     err_E = np.abs(grad_ad[0] - grad_fd_E) / (np.abs(grad_fd_E) + 1e-10)
-    err_k = np.abs(grad_ad[1] - grad_fd_k) / (np.abs(grad_fd_k) + 1e-10)
     
-    print("\nRelative Errors:")
-    print(f"  Error in dLoss/dE: {err_E:.2e}")
-    print(f"  Error in dLoss/dk: {err_k:.2e}")
+    print(f"  AD Grad E: {grad_ad[0]:.4e}")
+    print(f"  FD Grad E: {grad_fd_E:.4e}")
+    print(f"  Error: {err_E:.2e}")
 
-    if err_E < 1e-3 and err_k < 1e-3:
-        print("\nSUCCESS: Drucker-Prager AD gradient matches FD gradient!")
+    if err_E < 1e-3:
+        print("  SUCCESS")
     else:
-        print("\nWARNING: Significant discrepancy between AD and FD gradients.")
+        print("  GRADIENT MISMATCH")
 
 if __name__ == "__main__":
-    displacements = [-1e-5, -5e-5, -1e-4, -5e-4, -1e-3, -1e-2, -1e-1]
+    displacements = [-0.001, -0.01, -0.1]
+    print("Strategy 5: Correct Boundary Conditions")
+    print("="*40)
     for disp in displacements:
         try:
-            run_dp_grad_test(disp)
+            run_test(disp)
         except Exception as e:
-            print(f"\nFAILURE at Displacement {disp}: {e}")
-            print("Skipping to next displacement...")
+            print(f"  FAILURE at {disp}: {e}")

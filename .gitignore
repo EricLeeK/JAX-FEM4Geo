@@ -1,0 +1,6 @@
+# Ignore VTU files
+*.vtu
+*.VTU
+
+# Ignore VS Code files
+.vscode/

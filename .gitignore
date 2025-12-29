@@ -2,5 +2,8 @@
 *.vtu
 *.VTU
 
-# Ignore VS Code files
+# Obsidian
+.obsidian/
+
+# VS Code
 .vscode/

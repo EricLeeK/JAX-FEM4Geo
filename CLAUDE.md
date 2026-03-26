@@ -79,13 +79,8 @@ Tests verify differentiability (AD vs FD) for various constitutive model impleme
 
 ```bash
 # Run specific test
-python tests/test_diff_dp.py                    # Basic Drucker-Prager differentiability
-python tests/test_diff_elastic.py               # Elastic model
-python tests/test_diff_dp_strategy1_visco.py    # Viscoplastic regularization
-python tests/test_diff_dp_strategy2_direct.py   # Direct differentiation
-python tests/test_diff_dp_strategy3_smooth.py   # Smooth yield surface
-python tests/test_diff_dp_hardening.py          # Hardening model
-python tests/test_diff_dp_bc_fix.py             # BC handling
+python tests/test_diff_dp.py       # Drucker-Prager AD vs FD (stress-based loss)
+python tests/test_diff_elastic.py  # Elastic AD vs FD (stress-based loss)
 
 # Run all tests in the directory
 python -m pytest tests/

@@ -25,13 +25,11 @@ a = 0.01 * k    # Regularization
 # Lame parameters
 mu = E / (2. * (1. + nu))
 lmbda = E * nu / ((1. + nu) * (1. - 2. * nu))
+bulk_K = lmbda + 2. * mu / 3.
 
 # =============================================================================
 # Constitutive Model Functions (Numpy version of JAX logic)
 # =============================================================================
-
-def safe_sqrt(x):
-    return np.sqrt(x) if x > 0 else 0.
 
 def elastic_stress(epsilon):
     return lmbda * np.trace(epsilon) * np.eye(3) + 2. * mu * epsilon
@@ -53,11 +51,13 @@ def stress_return_map_point(epsilon_inc, sigma_old):
     if f_yield <= 0:
         return sigma_trial
     
-    # Plastic correction
-    n_dev = s_dev / (2. * sqrt_J2_reg) if sqrt_J2_reg > 1e-12 else np.zeros((3,3))
-    delta_lambda = f_yield / (1. + 3. * alpha * alpha)
-    
-    sigma = sigma_trial - delta_lambda * (n_dev + alpha * np.eye(3))
+    # Associated Drucker-Prager return mapping (modulus-consistent form)
+    n_dev = s_dev / sqrt_J2_reg if sqrt_J2_reg > 1e-12 else np.zeros((3, 3))
+    denom = mu + 9. * bulk_K * alpha * alpha
+    delta_lambda = f_yield / denom
+    sigma = sigma_trial - delta_lambda * (
+        mu * n_dev + 3. * bulk_K * alpha * np.eye(3)
+    )
     
     # Apex return
     if np.trace(sigma) > k / alpha:

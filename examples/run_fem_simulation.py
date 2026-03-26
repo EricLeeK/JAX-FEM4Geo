@@ -59,6 +59,11 @@ def run_simulation():
     # BCs
     def top(point): return np.isclose(point[2], Lz, atol=1e-5)
     def bottom(point): return np.isclose(point[2], 0., atol=1e-5)
+    def corner(point):
+        return np.logical_and(
+            np.logical_and(np.isclose(point[0], 0., atol=1e-5), np.isclose(point[1], 0., atol=1e-5)),
+            np.isclose(point[2], 0., atol=1e-5),
+        )
     def dirichlet_val_bottom(point): return 0.
     def get_dirichlet_top(disp):
         def val_fn(point): return disp
@@ -66,9 +71,9 @@ def run_simulation():
 
     disps = np.hstack((np.linspace(0., -0.15, 16), np.linspace(-0.14, 0., 15)))
 
-    location_fns = [bottom, top]
-    value_fns = [dirichlet_val_bottom, get_dirichlet_top(disps[0])]
-    vecs = [2, 2]
+    location_fns = [bottom, top, corner, corner]
+    value_fns = [dirichlet_val_bottom, get_dirichlet_top(disps[0]), lambda point: 0., lambda point: 0.]
+    vecs = [2, 2, 0, 1]
     dirichlet_bc_info = [location_fns, vecs, value_fns]
 
     # Initialize Problem
@@ -89,10 +94,10 @@ def run_simulation():
         if i % 5 == 0:
             print(f"Step {i+1}/{len(disps)}, displacement = {disp:.4f} mm")
         
-        dirichlet_bc_info[-1][-1] = get_dirichlet_top(disp)
+        dirichlet_bc_info[-1][1] = get_dirichlet_top(disp)
         problem.fe.update_Dirichlet_boundary_conditions(dirichlet_bc_info)
         
-        sol_list = solver(problem, solver_options={'petsc_solver': {}}) 
+        sol_list = solver(problem, solver_options={'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}) 
         problem.update_stress_strain(sol_list[0])
         
         avg_stress = problem.compute_avg_stress()

@@ -1,0 +1,127 @@
+{
+  "displacement": -0.03,
+  "base_params": {
+    "E": 70000.0,
+    "k": 50.0
+  },
+  "comparisons": {
+    "E": {
+      "minus": {
+        "params": {
+          "E": 69900.0,
+          "k": 50.0
+        },
+        "summary": {
+          "num_quadrature_points": 64,
+          "plastic_count": 64,
+          "apex_count": 0,
+          "elastic_count": 0,
+          "f_yield_min": 113.39877236611102,
+          "f_yield_max": 113.39877236611139,
+          "f_yield_mean": 113.39877236611125
+        }
+      },
+      "base": {
+        "params": {
+          "E": 70000.0,
+          "k": 50.0
+        },
+        "summary": {
+          "num_quadrature_points": 64,
+          "plastic_count": 64,
+          "apex_count": 0,
+          "elastic_count": 0,
+          "f_yield_min": 113.63228694738339,
+          "f_yield_max": 113.63228694738376,
+          "f_yield_mean": 113.63228694738356
+        }
+      },
+      "plus": {
+        "params": {
+          "E": 70100.0,
+          "k": 50.0
+        },
+        "summary": {
+          "num_quadrature_points": 64,
+          "plastic_count": 64,
+          "apex_count": 0,
+          "elastic_count": 0,
+          "f_yield_min": 113.8658018791744,
+          "f_yield_max": 113.86580187917477,
+          "f_yield_mean": 113.8658018791746
+        }
+      },
+      "switches_vs_base_minus": {
+        "plastic_switch_count": 0,
+        "plastic_switch_points": [],
+        "apex_switch_count": 0,
+        "apex_switch_points": []
+      },
+      "switches_vs_base_plus": {
+        "plastic_switch_count": 0,
+        "plastic_switch_points": [],
+        "apex_switch_count": 0,
+        "apex_switch_points": []
+      }
+    },
+    "k": {
+      "minus": {
+        "params": {
+          "E": 70000.0,
+          "k": 49.0
+        },
+        "summary": {
+          "num_quadrature_points": 64,
+          "plastic_count": 64,
+          "apex_count": 0,
+          "elastic_count": 0,
+          "f_yield_min": 114.62888215495173,
+          "f_yield_max": 114.62888215495212,
+          "f_yield_mean": 114.62888215495192
+        }
+      },
+      "base": {
+        "params": {
+          "E": 70000.0,
+          "k": 50.0
+        },
+        "summary": {
+          "num_quadrature_points": 64,
+          "plastic_count": 64,
+          "apex_count": 0,
+          "elastic_count": 0,
+          "f_yield_min": 113.63228694738339,
+          "f_yield_max": 113.63228694738376,
+          "f_yield_mean": 113.63228694738356
+        }
+      },
+      "plus": {
+        "params": {
+          "E": 70000.0,
+          "k": 51.0
+        },
+        "summary": {
+          "num_quadrature_points": 64,
+          "plastic_count": 64,
+          "apex_count": 0,
+          "elastic_count": 0,
+          "f_yield_min": 112.6357604413326,
+          "f_yield_max": 112.63576044133299,
+          "f_yield_mean": 112.63576044133278
+        }
+      },
+      "switches_vs_base_minus": {
+        "plastic_switch_count": 0,
+        "plastic_switch_points": [],
+        "apex_switch_count": 0,
+        "apex_switch_points": []
+      },
+      "switches_vs_base_plus": {
+        "plastic_switch_count": 0,
+        "plastic_switch_points": [],
+        "apex_switch_count": 0,
+        "apex_switch_points": []
+      }
+    }
+  }
+}

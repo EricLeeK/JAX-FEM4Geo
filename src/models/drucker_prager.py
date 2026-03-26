@@ -2,6 +2,9 @@
 Drucker-Prager Plasticity Model Definition
 
 This module implements the Drucker-Prager yield criterion using JAX-FEM.
+
+E and k are passed through internal_vars (indices 2 and 3) so that
+ad_wrapper can differentiate through them correctly.
 """
 
 import jax
@@ -24,7 +27,7 @@ class DruckerPragerPlasticity(Problem):
     Drucker-Prager plasticity with hyperbolic apex regularization.
     Inherits from JAX-FEM Problem class.
     """
-    def __init__(self, mesh, vec=1, dim=1, dirichlet_bc_info=None, 
+    def __init__(self, mesh, vec=3, dim=3, dirichlet_bc_info=None,
                  E=70.0e3, nu=0.3, alpha=0.3, k=250.0, a=None):
         """
         Args:
@@ -44,45 +47,48 @@ class DruckerPragerPlasticity(Problem):
         self.alpha = alpha
         self.k = k
         self.a = a if a is not None else 0.01 * k
+        self._a_ratio = self.a / self.k
 
     def custom_init(self):
         """Initialize internal variables for stress and strain history."""
         self.fe = self.fes[0]
-        self.epsilons_old = np.zeros((len(self.fe.cells), self.fe.num_quads, 
-                                       self.fe.vec, self.dim))
+        nc, nq = len(self.fe.cells), self.fe.num_quads
+        self.epsilons_old = np.zeros((nc, nq, self.fe.vec, self.dim))
         self.sigmas_old = np.zeros_like(self.epsilons_old)
-        self.internal_vars = [self.sigmas_old, self.epsilons_old]
+        E_field = np.full((nc, nq, 1), self.E)
+        k_field = np.full((nc, nq, 1), self.k)
+        self.internal_vars = [self.sigmas_old, self.epsilons_old, E_field, k_field]
+
+    def set_params(self, params):
+        """Update E and k fields from a parameter array [E, k]."""
+        nc, nq = len(self.fe.cells), self.fe.num_quads
+        self.internal_vars[2] = np.full((nc, nq, 1), params[0])
+        self.internal_vars[3] = np.full((nc, nq, 1), params[1])
 
     def get_tensor_map(self):
         """Return the stress computation function for the FEM solver."""
-        _, stress_return_map = self.get_maps()
-        return stress_return_map
-
-    def get_maps(self):
-        """Define strain, elastic stress, and DP return mapping functions."""
-        
-        # Capture material parameters in closure
-        E, nu, alpha, k, a = self.E, self.nu, self.alpha, self.k, self.a
+        nu = self.nu
+        alpha = self.alpha
         dim = self.dim
-
-        def safe_sqrt(x):
-            return np.where(x > 0., np.sqrt(x), 0.)
+        a_ratio = self._a_ratio
 
         def safe_divide(x, y):
-            return np.where(y == 0., 0., x / y)
+            tiny = 1e-30
+            y_safe = np.where(np.abs(y) < tiny, 1., y)
+            return np.where(np.abs(y) < tiny, 0., x / y_safe)
 
-        def strain(u_grad):
-            return 0.5 * (u_grad + u_grad.T)
+        def stress_return_map(u_grad, sigma_old, epsilon_old, E_arr, k_arr):
+            E = E_arr[0]
+            k = k_arr[0]
+            a = a_ratio * k
 
-        def elastic_stress(epsilon):
             mu = E / (2. * (1. + nu))
             lmbda = E * nu / ((1. + nu) * (1. - 2. * nu))
-            return lmbda * np.trace(epsilon) * np.eye(dim) + 2. * mu * epsilon
+            bulk_k = lmbda + 2. * mu / 3.
 
-        def stress_return_map(u_grad, sigma_old, epsilon_old):
-            epsilon_crt = strain(u_grad)
+            epsilon_crt = 0.5 * (u_grad + u_grad.T)
             epsilon_inc = epsilon_crt - epsilon_old
-            sigma_trial = elastic_stress(epsilon_inc) + sigma_old
+            sigma_trial = lmbda * np.trace(epsilon_inc) * np.eye(dim) + 2. * mu * epsilon_inc + sigma_old
 
             I1 = np.trace(sigma_trial)
             s_dev = sigma_trial - (I1 / 3.) * np.eye(dim)
@@ -92,11 +98,65 @@ class DruckerPragerPlasticity(Problem):
             f_yield = sqrt_J2_reg + alpha * I1 - k
 
             f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
-            
-            n_dev = safe_divide(s_dev, 2. * sqrt_J2_reg)
-            delta_lambda = f_yield_plus / (1. + 3. * alpha * alpha)
-            
-            sigma = sigma_trial - delta_lambda * (n_dev + alpha * np.eye(dim))
+
+            n_dev = safe_divide(s_dev, sqrt_J2_reg)
+            denom = mu + 9. * bulk_k * alpha * alpha
+            delta_lambda = safe_divide(f_yield_plus, denom)
+            sigma = sigma_trial - delta_lambda * (
+                mu * n_dev + 3. * bulk_k * alpha * np.eye(dim)
+            )
+
+            sigma_apex = (k / (3. * alpha)) * np.eye(dim)
+            at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
+            sigma = np.where(at_apex, sigma_apex, sigma)
+
+            return sigma
+
+        return stress_return_map
+
+    def get_maps(self):
+        """Define strain and DP return mapping functions (backward compat)."""
+        nu = self.nu
+        alpha = self.alpha
+        dim = self.dim
+        a_ratio = self._a_ratio
+
+        def safe_divide(x, y):
+            tiny = 1e-30
+            y_safe = np.where(np.abs(y) < tiny, 1., y)
+            return np.where(np.abs(y) < tiny, 0., x / y_safe)
+
+        def strain(u_grad):
+            return 0.5 * (u_grad + u_grad.T)
+
+        def stress_return_map(u_grad, sigma_old, epsilon_old, E_arr, k_arr):
+            E = E_arr[0]
+            k = k_arr[0]
+            a = a_ratio * k
+
+            mu = E / (2. * (1. + nu))
+            lmbda = E * nu / ((1. + nu) * (1. - 2. * nu))
+            bulk_k = lmbda + 2. * mu / 3.
+
+            epsilon_crt = strain(u_grad)
+            epsilon_inc = epsilon_crt - epsilon_old
+            sigma_trial = lmbda * np.trace(epsilon_inc) * np.eye(dim) + 2. * mu * epsilon_inc + sigma_old
+
+            I1 = np.trace(sigma_trial)
+            s_dev = sigma_trial - (I1 / 3.) * np.eye(dim)
+            J2 = 0.5 * np.sum(s_dev * s_dev)
+
+            sqrt_J2_reg = np.sqrt(J2 + a * a)
+            f_yield = sqrt_J2_reg + alpha * I1 - k
+
+            f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
+
+            n_dev = safe_divide(s_dev, sqrt_J2_reg)
+            denom = mu + 9. * bulk_k * alpha * alpha
+            delta_lambda = safe_divide(f_yield_plus, denom)
+            sigma = sigma_trial - delta_lambda * (
+                mu * n_dev + 3. * bulk_k * alpha * np.eye(dim)
+            )
 
             sigma_apex = (k / (3. * alpha)) * np.eye(dim)
             at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
@@ -115,9 +175,13 @@ class DruckerPragerPlasticity(Problem):
     def update_stress_strain(self, sol):
         u_grads = self.fe.sol_to_grad(sol)
         vmap_strain, vmap_stress_rm = self.stress_strain_fns()
-        self.sigmas_old = vmap_stress_rm(u_grads, self.sigmas_old, self.epsilons_old)
+        self.sigmas_old = vmap_stress_rm(
+            u_grads, self.sigmas_old, self.epsilons_old,
+            self.internal_vars[2], self.internal_vars[3],
+        )
         self.epsilons_old = vmap_strain(u_grads)
-        self.internal_vars = [self.sigmas_old, self.epsilons_old]
+        self.internal_vars = [self.sigmas_old, self.epsilons_old,
+                              self.internal_vars[2], self.internal_vars[3]]
 
     def compute_avg_stress(self):
         sigma = np.sum(

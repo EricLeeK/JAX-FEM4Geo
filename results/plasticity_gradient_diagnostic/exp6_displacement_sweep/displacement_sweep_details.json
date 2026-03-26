@@ -1,0 +1,332 @@
+{
+  "base_params": {
+    "E": 70000.0,
+    "k": 50.0
+  },
+  "displacements": [
+    {
+      "displacement": -0.02,
+      "loss": -140.0,
+      "grad_ad": {
+        "E": -0.0020000000000000013,
+        "k": 0.0
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 0,
+        "apex_count": 0,
+        "elastic_count": 64,
+        "f_yield_min": -11.016462578291595,
+        "f_yield_max": -11.01646257829097,
+        "f_yield_mean": -11.01646257829107
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0019999999999998864,
+          "rel_error": 5.74627151417317e-14
+        },
+        "k": {
+          "grad_fd": 0.0,
+          "rel_error": 0.0
+        }
+      }
+    },
+    {
+      "displacement": -0.021,
+      "loss": -147.00000000000006,
+      "grad_ad": {
+        "E": -0.002100000000000001,
+        "k": 0.0
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 0,
+        "apex_count": 0,
+        "elastic_count": 64,
+        "f_yield_min": -9.082354772671572,
+        "f_yield_max": -9.082354772670755,
+        "f_yield_mean": -9.08235477267089
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0021000000000000797,
+          "rel_error": 3.7379160613308355e-14
+        },
+        "k": {
+          "grad_fd": 0.0,
+          "rel_error": 0.0
+        }
+      }
+    },
+    {
+      "displacement": -0.022,
+      "loss": -154.0,
+      "grad_ad": {
+        "E": -0.0021999999999999997,
+        "k": 0.0
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 0,
+        "apex_count": 0,
+        "elastic_count": 64,
+        "f_yield_min": -7.147580979890165,
+        "f_yield_max": -7.147580979889398,
+        "f_yield_mean": -7.1475809798895495
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0021999999999999884,
+          "rel_error": 5.125319360840567e-15
+        },
+        "k": {
+          "grad_fd": 0.0,
+          "rel_error": 0.0
+        }
+      }
+    },
+    {
+      "displacement": -0.023,
+      "loss": -161.00000000000003,
+      "grad_ad": {
+        "E": -0.0022999999999999987,
+        "k": 0.0
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 0,
+        "apex_count": 0,
+        "elastic_count": 64,
+        "f_yield_min": -5.212227799064706,
+        "f_yield_max": -5.212227799064003,
+        "f_yield_mean": -5.212227799064128
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0022999999999998976,
+          "rel_error": 4.3933757598108293e-14
+        },
+        "k": {
+          "grad_fd": 0.0,
+          "rel_error": 0.0
+        }
+      }
+    },
+    {
+      "displacement": -0.024,
+      "loss": -168.0,
+      "grad_ad": {
+        "E": -0.002400000000000001,
+        "k": 0.0
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 0,
+        "apex_count": 0,
+        "elastic_count": 64,
+        "f_yield_min": -3.2763674484943834,
+        "f_yield_max": -3.2763674484936374,
+        "f_yield_mean": -3.2763674484937835
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.002400000000000091,
+          "rel_error": 3.740497495074849e-14
+        },
+        "k": {
+          "grad_fd": 0.0,
+          "rel_error": 0.0
+        }
+      }
+    },
+    {
+      "displacement": -0.025,
+      "loss": -175.0,
+      "grad_ad": {
+        "E": -0.0025000000000000005,
+        "k": 0.0
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 0,
+        "apex_count": 0,
+        "elastic_count": 64,
+        "f_yield_min": -1.3400606300439009,
+        "f_yield_max": -1.3400606300430766,
+        "f_yield_mean": -1.3400606300432278
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0025,
+          "rel_error": 1.7347234759768068e-16
+        },
+        "k": {
+          "grad_fd": 0.0,
+          "rel_error": 0.0
+        }
+      }
+    },
+    {
+      "displacement": -0.026,
+      "loss": -179.867406149149,
+      "grad_ad": {
+        "E": -2.7466572772973444e-05,
+        "k": -3.5588949211006518
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 8.166160820448042,
+        "f_yield_max": 8.16616082044834,
+        "f_yield_mean": 8.166160820448201
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.002774985713152205,
+          "rel_error": 0.9901020849791067
+        },
+        "k": {
+          "grad_fd": 0.28763205515505774,
+          "rel_error": 1.080820609074376
+        }
+      }
+    },
+    {
+      "displacement": -0.027,
+      "loss": -179.9324718445847,
+      "grad_ad": {
+        "E": -2.203945922413242e-05,
+        "k": -3.5677941939489854
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 34.708933672343505,
+        "f_yield_max": 34.70893367234376,
+        "f_yield_mean": 34.708933672343605
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0027756682616480077,
+          "rel_error": 0.9920597646596835
+        },
+        "k": {
+          "grad_fd": 0.28728628180941485,
+          "rel_error": 1.0805221002648233
+        }
+      }
+    },
+    {
+      "displacement": -0.028,
+      "loss": -179.98324575893312,
+      "grad_ad": {
+        "E": -1.8017645570154138e-05,
+        "k": -3.5744402112295903
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 61.292044899001695,
+        "f_yield_max": 61.29204489900202,
+        "f_yield_mean": 61.29204489900185
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0027762276864976344,
+          "rel_error": 0.993510025975973
+        },
+        "k": {
+          "grad_fd": 0.2870539767486804,
+          "rel_error": 1.0803073935456695
+        }
+      }
+    },
+    {
+      "displacement": -0.029,
+      "loss": -180.0236129115167,
+      "grad_ad": {
+        "E": -1.4966243846037917e-05,
+        "k": -3.579519516488617
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 87.90504295379327,
+        "f_yield_max": 87.90504295379378,
+        "f_yield_mean": 87.90504295379354
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.002776693804621004,
+          "rel_error": 0.9946100488929924
+        },
+        "k": {
+          "grad_fd": 0.2868991817765618,
+          "rel_error": 1.0801501934701
+        }
+      }
+    },
+    {
+      "displacement": -0.03,
+      "loss": -180.0562268527662,
+      "grad_ad": {
+        "E": -1.2603562076299053e-05,
+        "k": -3.5834795495503036
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.54069013406507,
+        "f_yield_max": 114.54069013406544,
+        "f_yield_mean": 114.54069013406524
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0027770876782601305,
+          "rel_error": 0.9954615901489307
+        },
+        "k": {
+          "grad_fd": 0.2867983119749198,
+          "rel_error": 1.0800334724976763
+        }
+      }
+    },
+    {
+      "displacement": -0.031,
+      "loss": -180.0829485540833,
+      "grad_ad": {
+        "E": -1.0741483847240794e-05,
+        "k": -3.586620892866768
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 141.19384114184763,
+        "f_yield_max": 141.19384114184805,
+        "f_yield_mean": 141.19384114184786
+      },
+      "fd": {
+        "E": {
+          "grad_fd": -0.0027774245691311707,
+          "rel_error": 0.9961325740520107
+        },
+        "k": {
+          "grad_fd": 0.2867355135707754,
+          "rel_error": 1.0799458660771892
+        }
+      }
+    }
+  ]
+}

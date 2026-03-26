@@ -1,0 +1,156 @@
+{
+  "displacement": -0.03,
+  "base_params": {
+    "E": 70000.0,
+    "k": 50.0
+  },
+  "variants": {
+    "hard": {
+      "yield_beta": null,
+      "loss": -180.0562268527662,
+      "grad_ad": {
+        "E": -1.2603562076299053e-05,
+        "k": -3.5834795495503036
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.54069013406507,
+        "f_yield_max": 114.54069013406544,
+        "f_yield_mean": 114.54069013406524
+      },
+      "grad_fd_E": -0.0027770876782601305,
+      "rel_error_E": 0.9954615901489307,
+      "grad_fd_k": 0.2867983119749198,
+      "rel_error_k": 1.0800334724976763
+    },
+    "softplus_beta_1": {
+      "yield_beta": 1.0,
+      "loss": -180.05622682285681,
+      "grad_ad": {
+        "E": -1.2603562068916503e-05,
+        "k": -3.583479549560665
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.54069023220777,
+        "f_yield_max": 114.54069023220816,
+        "f_yield_mean": 114.54069023220802
+      },
+      "grad_fd_E": -0.002777087677832526,
+      "rel_error_E": 0.9954615901508902,
+      "grad_fd_k": 0.28679831197436556,
+      "rel_error_k": 1.0800334724972902
+    },
+    "softplus_beta_5": {
+      "yield_beta": 5.0,
+      "loss": -180.05622685276617,
+      "grad_ad": {
+        "E": -1.2603562076298619e-05,
+        "k": -3.5834795495503036
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.5406901340651,
+        "f_yield_max": 114.54069013406547,
+        "f_yield_mean": 114.54069013406529
+      },
+      "grad_fd_E": -0.0027770876782601305,
+      "rel_error_E": 0.9954615901489308,
+      "grad_fd_k": 0.2867983119749056,
+      "rel_error_k": 1.0800334724976723
+    },
+    "softplus_beta_10": {
+      "yield_beta": 10.0,
+      "loss": -180.05622685276617,
+      "grad_ad": {
+        "E": -1.2603562076298619e-05,
+        "k": -3.5834795495503036
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.5406901340651,
+        "f_yield_max": 114.54069013406547,
+        "f_yield_mean": 114.54069013406529
+      },
+      "grad_fd_E": -0.0027770876782601305,
+      "rel_error_E": 0.9954615901489308,
+      "grad_fd_k": 0.2867983119749056,
+      "rel_error_k": 1.0800334724976723
+    },
+    "softplus_beta_50": {
+      "yield_beta": 50.0,
+      "loss": -180.05622685276617,
+      "grad_ad": {
+        "E": -1.2603562076296017e-05,
+        "k": -3.5834795495503067
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.54069013406513,
+        "f_yield_max": 114.54069013406556,
+        "f_yield_mean": 114.54069013406536
+      },
+      "grad_fd_E": -0.0027770876782601305,
+      "rel_error_E": 0.9954615901489318,
+      "grad_fd_k": 0.2867983119749056,
+      "rel_error_k": 1.0800334724976723
+    },
+    "softplus_beta_100": {
+      "yield_beta": 100.0,
+      "loss": -180.05622685276617,
+      "grad_ad": {
+        "E": -1.2603562076296017e-05,
+        "k": -3.5834795495503067
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.54069013406513,
+        "f_yield_max": 114.54069013406556,
+        "f_yield_mean": 114.54069013406536
+      },
+      "grad_fd_E": -0.0027770876782601305,
+      "rel_error_E": 0.9954615901489318,
+      "grad_fd_k": 0.2867983119749056,
+      "rel_error_k": 1.0800334724976723
+    },
+    "softplus_beta_500": {
+      "yield_beta": 500.0,
+      "loss": -180.0562268527662,
+      "grad_ad": {
+        "E": -1.2603562076297318e-05,
+        "k": -3.5834795495503045
+      },
+      "yield_summary": {
+        "num_quadrature_points": 64,
+        "plastic_count": 64,
+        "apex_count": 0,
+        "elastic_count": 0,
+        "f_yield_min": 114.54069013406496,
+        "f_yield_max": 114.54069013406544,
+        "f_yield_mean": 114.54069013406522
+      },
+      "grad_fd_E": -0.0027770876782599887,
+      "rel_error_E": 0.9954615901489311,
+      "grad_fd_k": 0.2867983119749056,
+      "rel_error_k": 1.0800334724976723
+    }
+  }
+}

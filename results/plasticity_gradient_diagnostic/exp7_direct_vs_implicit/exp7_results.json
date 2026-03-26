@@ -1,0 +1,29 @@
+{
+  "displacement": -0.03,
+  "params": {
+    "E": 70000.0,
+    "k": 50.0
+  },
+  "loss_implicit": -180.05622685276617,
+  "loss_direct": -180.05622685276617,
+  "results": {
+    "E": {
+      "ad_implicit": -1.2603562076298185e-05,
+      "ad_direct": -0.0027770876787269285,
+      "fd_full": -1.2603770196761843e-05,
+      "fd_direct": -0.0027770876782599887,
+      "rel_err_impl_vs_fd_full": 1.6512556196167628e-05,
+      "rel_err_direct_vs_fd_direct": 1.6814011974278805e-10,
+      "rel_err_direct_vs_fd_full": 0.9954615152077086
+    },
+    "k": {
+      "ad_implicit": -3.5834795495503085,
+      "ad_direct": 0.28679821316239007,
+      "fd_full": -3.583444889701809,
+      "fd_direct": 0.28679831197489136,
+      "rel_err_impl_vs_fd_full": 9.672121193942006e-06,
+      "rel_err_direct_vs_fd_direct": 3.445365511811346e-07,
+      "rel_err_direct_vs_fd_full": 1.0800342190238779
+    }
+  }
+}

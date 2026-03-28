@@ -291,10 +291,14 @@ def cylinder_mesh_gmsh(data_dir, R=5, H=10, circle_mesh=5, hight_mesh=20, rect_r
     rect_coor = R*rect_ratio
     msh_dir = os.path.join(data_dir, 'msh')
     os.makedirs(msh_dir, exist_ok=True)
-    geo_file = os.path.join(msh_dir, 'cylinder.geo')
-    msh_file = os.path.join(msh_dir, 'cylinder.msh')
+    base_name = f'cylinder_R{R}_H{H}_c{circle_mesh}_h{hight_mesh}_r{rect_ratio}'
+    geo_file = os.path.join(msh_dir, f'{base_name}.geo')
+    msh_file = os.path.join(msh_dir, f'{base_name}.msh')
 
-    string='''
+    if os.path.isfile(msh_file):
+        print(f"Reusing cached mesh file: {msh_file}")
+    else:
+        string='''
         Point(1) = {{0, 0, 0, 1.0}};
         Point(2) = {{-{rect_coor}, {rect_coor}, 0, 1.0}};
         Point(3) = {{{rect_coor}, {rect_coor}, 0, 1.0}};
@@ -345,9 +349,9 @@ def cylinder_mesh_gmsh(data_dir, R=5, H=10, circle_mesh=5, hight_mesh=20, rect_r
 
         Mesh 3;'''.format(R=R, H=H, rect_coor=rect_coor, circle_mesh=circle_mesh, hight_mesh=hight_mesh)
 
-    with open(geo_file, "w") as f:
-        f.write(string)
-    os.system("gmsh -3 {geo_file} -o {msh_file} -format msh2".format(geo_file=geo_file, msh_file=msh_file))
+        with open(geo_file, "w") as f:
+            f.write(string)
+        os.system("gmsh -3 {geo_file} -o {msh_file} -format msh2".format(geo_file=geo_file, msh_file=msh_file))
 
     mesh = meshio.read(msh_file)
     points = mesh.points # (num_total_nodes, dim)

@@ -1,0 +1,38 @@
+{
+  "disp_joint": {
+    "E_final": 59999.999999999,
+    "k_final": 45.00000132662785,
+    "err_E": 0.1428571428571571,
+    "err_k": 0.09999997346744294,
+    "time_s": 3.9310789108276367,
+    "hessian_eigenvalues": [
+      -5.464818534107332e-06,
+      9.31456525943202e-06
+    ],
+    "condition_number": 1.7044601209166295,
+    "strategy": "joint L-BFGS-B"
+  },
+  "disp_two_stage": {
+    "E_final": 72845.33897224924,
+    "k_final": 54.2871706909586,
+    "err_E": 0.040647699603560614,
+    "err_k": 0.08574341381917193,
+    "time_s": 1.5506231784820557,
+    "strategy": "two-stage displacement (elastic\u2192E, plastic\u2192k)"
+  },
+  "sigma_two_stage": {
+    "E_final": 70000.00000000001,
+    "k_final": 50.008516238273515,
+    "err_E": 2.078845032623836e-16,
+    "err_k": 0.00017032476547029773,
+    "time_s": 1.9227709770202637,
+    "hessian_eigenvalues": [
+      -2.676310884986178e-12,
+      25.552401732020556
+    ],
+    "condition_number": 9547620896872.197,
+    "strategy": "two-stage \u03c3_zz (elastic\u2192E, plastic\u2192k)"
+  },
+  "condition_improvement": 5601551353244.716,
+  "total_time_s": 24.03641390800476
+}

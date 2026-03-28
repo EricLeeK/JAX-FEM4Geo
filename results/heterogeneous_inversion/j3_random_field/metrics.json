@@ -1,0 +1,36 @@
+{
+  "Nx": 30,
+  "Ny": 30,
+  "num_cells": 900,
+  "displacement": -0.1,
+  "k_fixed": 50.0,
+  "noise_level": 0.01,
+  "reg_type": "laplacian",
+  "reg_weight": 0.1,
+  "E_ref": 70000.0,
+  "optimizer": "lbfgs",
+  "maxiter": 150,
+  "metrics": {
+    "L2_relative_error": 0.027139501669482785,
+    "max_relative_error": 0.08573729007418572,
+    "mean_relative_error": 0.02160165934839789,
+    "max_absolute_error": 6097.590872634668
+  },
+  "correlation_coefficient": 0.9782577648631245,
+  "time_s": 23.160573959350586,
+  "nit": 93,
+  "final_loss": 0.0018880004765492247,
+  "loss_at_true": 0.001962185614688787,
+  "true_field_stats": {
+    "mean": 69898.74638273702,
+    "std": 8760.066207043972,
+    "min": 41923.1499175661,
+    "max": 87776.14283124448
+  },
+  "inverted_field_stats": {
+    "mean": 70156.35776914589,
+    "std": 9106.41237811303,
+    "min": 41508.96999132618,
+    "max": 87008.81709024782
+  }
+}

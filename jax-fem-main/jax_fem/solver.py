@@ -314,52 +314,74 @@ def linear_incremental_solver(problem, res_vec, A, dofs, solver_options):
 
     inc = linear_solver(A, b, x0, solver_options)
 
-    line_search_flag = solver_options['line_search_flag'] if 'line_search_flag' in solver_options else False
+    line_search_flag = solver_options.get('line_search_flag', False)
     if line_search_flag:
-        dofs = line_search(problem, dofs, inc)
+        dofs = line_search(problem, dofs, inc, res_vec, solver_options)
     else:
         dofs = dofs + inc
 
     return dofs
 
 
-def line_search(problem, dofs, inc):
+def _eval_residual_norm(problem, dofs):
+    """Evaluate residual norm at given dofs, matching Newton's BC handling."""
+    if hasattr(problem, 'P_mat'):
+        full_dofs = problem.P_mat @ dofs
+    else:
+        full_dofs = dofs
+
+    sol_list = problem.unflatten_fn_sol_list(full_dofs)
+    res_list = problem.compute_residual(sol_list)
+    res_vec = jax.flatten_util.ravel_pytree(res_list)[0]
+    res_vec = apply_bc_vec(res_vec, full_dofs, problem)
+
+    if hasattr(problem, 'P_mat'):
+        res_vec = problem.P_mat.T @ res_vec
+
+    return float(np.linalg.norm(res_vec))
+
+
+def line_search(problem, dofs, inc, res_vec, solver_options):
+    """Backtracking line search with finite-value and residual-decrease checks.
+
+    Finds the largest step size alpha such that the residual at (dofs + alpha*inc)
+    is finite and smaller than the current residual norm.
     """
-    TODO: This is useful for finite deformation plasticity.
-    """
-    res_fn = problem.compute_residual
-    res_fn = get_flatten_fn(res_fn, problem)
-    res_fn = apply_bc(res_fn, problem)
+    shrink = solver_options.get('line_search_shrink', 0.5)
+    max_ls_iters = solver_options.get('line_search_max_iters', 10)
+    min_alpha = solver_options.get('line_search_min_alpha', 1e-8)
 
-    def res_norm_fn(alpha):
-        res_vec = res_fn(dofs + alpha*inc)
-        return np.linalg.norm(res_vec)
+    res_norm0 = float(np.linalg.norm(res_vec))
 
-    # grad_res_norm_fn = jax.grad(res_norm_fn)
-    # hess_res_norm_fn = jax.hessian(res_norm_fn)
+    alpha = 1.0
+    best_alpha = None
+    best_res_norm = float('inf')
 
-    # tol = 1e-3
-    # alpha = 1.
-    # lr = 1.
-    # grad_alpha = 1.
-    # while np.abs(grad_alpha) > tol:
-    #     grad_alpha = grad_res_norm_fn(alpha)
-    #     hess_alpha = hess_res_norm_fn(alpha)
-    #     alpha = alpha - 1./hess_alpha*grad_alpha
-    #     print(f"alpha = {alpha}, grad_alpha = {grad_alpha}, hess_alpha = {hess_alpha}")
+    for i in range(max_ls_iters):
+        trial_res_norm = _eval_residual_norm(problem, dofs + alpha * inc)
 
-    alpha = 1.
-    res_norm = res_norm_fn(alpha)
-    for i in range(3):
-        alpha *= 0.5
-        res_norm_half = res_norm_fn(alpha)
-        print(f"i = {i}, res_norm = {res_norm}, res_norm_half = {res_norm_half}")
-        if res_norm_half > res_norm:
-            alpha *= 2.
+        logger.debug(f"Line search iter={i}, alpha={alpha:.6e}, "
+                     f"trial_res={trial_res_norm:.6e}, res0={res_norm0:.6e}")
+
+        if onp.isfinite(trial_res_norm):
+            if trial_res_norm < best_res_norm:
+                best_alpha = alpha
+                best_res_norm = trial_res_norm
+
+            if trial_res_norm < res_norm0:
+                return dofs + alpha * inc
+
+        alpha *= shrink
+        if alpha < min_alpha:
             break
-        res_norm = res_norm_half
 
-    return dofs + alpha*inc
+    if best_alpha is not None and best_res_norm < res_norm0:
+        logger.debug(f"Line search fallback: alpha={best_alpha:.6e}, res={best_res_norm:.6e}")
+        return dofs + best_alpha * inc
+
+    logger.warning(f"Line search failed (res0={res_norm0:.6e}, best={best_res_norm:.6e}). "
+                   f"Accepting full step.")
+    return dofs + inc
 
 
 def get_A(problem):
@@ -515,8 +537,9 @@ def solver(problem, solver_options={}):
         else:
             dofs = np.zeros(problem.num_total_dofs_all_vars)
 
-    rel_tol = solver_options['rel_tol'] if 'rel_tol' in solver_options else 1e-8
-    tol = solver_options['tol'] if 'tol' in solver_options else 1e-6
+    rel_tol = solver_options.get('rel_tol', 1e-8)
+    tol = solver_options.get('tol', 1e-6)
+    max_newton_iters = solver_options.get('max_iters', 50)
 
     def newton_update_helper(dofs):
         if hasattr(problem, 'P_mat'):
@@ -535,17 +558,29 @@ def solver(problem, solver_options={}):
 
     res_vec, A = newton_update_helper(dofs)
     res_val = np.linalg.norm(res_vec)
-    res_val_initial = res_val
-    rel_res_val = res_val/res_val_initial
+    res_val_initial = np.maximum(res_val, 1e-30)
+    rel_res_val = res_val / res_val_initial
     logger.debug(f"Before, l_2 res = {res_val}, relative l_2 res = {rel_res_val}")
+
+    newton_iter = 0
     while (rel_res_val > rel_tol) and (res_val > tol):
+        assert np.all(np.isfinite(res_val)), \
+            f"Non-finite residual at Newton iter {newton_iter}, res_val={res_val}"
+        assert np.all(np.isfinite(dofs)), \
+            f"Non-finite dofs at Newton iter {newton_iter}"
+
         dofs = linear_incremental_solver(problem, res_vec, A, dofs, solver_options)
         res_vec, A = newton_update_helper(dofs)
-        # logger.debug(f"DEBUG: l_2 res = {np.linalg.norm(apply_bc_vec(A @ dofs, dofs, problem))}")
         res_val = np.linalg.norm(res_vec)
-        rel_res_val = res_val/res_val_initial
+        rel_res_val = res_val / res_val_initial
+        newton_iter += 1
 
-        logger.debug(f"l_2 res = {res_val}, relative l_2 res = {rel_res_val}")
+        logger.debug(f"Newton iter {newton_iter}: l_2 res = {res_val}, relative l_2 res = {rel_res_val}")
+
+        if newton_iter >= max_newton_iters:
+            logger.warning(f"Newton failed to converge in {max_newton_iters} iterations. "
+                           f"res_val={res_val}, rel_res_val={rel_res_val}")
+            break
 
     assert np.all(np.isfinite(res_val)), f"res_val contains NaN, stop the program!"
     assert np.all(np.isfinite(dofs)), f"dofs contains NaN, stop the program!"

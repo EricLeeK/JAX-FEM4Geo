@@ -1,0 +1,21 @@
+{
+  "Nx": 20,
+  "Ny": 20,
+  "num_cells": 400,
+  "displacement": -0.1,
+  "k_fixed": 50.0,
+  "optimizer": "lbfgs",
+  "maxiter": 100,
+  "metrics": {
+    "L2_relative_error": 0.009595082927038215,
+    "max_relative_error": 0.02607721317116407,
+    "mean_relative_error": 0.006624535132768711,
+    "max_absolute_error": 2346.9491854047665
+  },
+  "time_s": 23.394831895828247,
+  "nit": 100,
+  "final_loss": 1.4864726751068216e-07,
+  "loss_at_true": 0.0,
+  "left_region_mean": 50021.673656306324,
+  "right_region_mean": 89953.70193931699
+}

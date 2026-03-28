@@ -49,3 +49,17 @@ The most useful artifacts are:
 - `exp4_taylor_test/taylor_test.csv`: `r0` and `r1` residuals with observed rates.
 - `exp5_smoothness_sweep/smoothness_sweep.csv`: AD/FD mismatch under different softplus smoothness levels.
 - `exp6_displacement_sweep/displacement_sweep.csv`: how gradient mismatch evolves with displacement.
+
+## Final Conclusion (2026-03-27)
+
+**Root cause**: JIT-compiled kernel functions that capture material parameters (E, k) via Python closure (`self.E`, `self.k`) produce correct forward results but **incorrect gradients** during the plastic regime. JAX traces the closure-captured values as constants, so `jax.grad` returns zero partial derivatives w.r.t. those parameters when plasticity is active.
+
+**Fix**: Pass E and k through JAX-FEM's `internal_vars` mechanism (`internal_vars[2]`, `internal_vars[3]`) instead of closure capture. This ensures they are part of the JAX computation graph and properly traced during AD.
+
+**Verification**: After applying the fix to `src/models/drucker_prager.py`:
+- Single-step AD vs FD: rel_err < 1e-5 across 15 displacement levels (elastic + plastic)
+- Multi-step AD vs FD: rel_err < 1e-5 for continued plastic loading and elastic unloading
+- Taylor test: second-order convergence confirmed
+- `pytest tests/` — 4/4 PASS
+
+See `ai过程文档/塑性阶段梯度诊断最终报告_2026-03-27.md` for the full 10-experiment diagnostic report.

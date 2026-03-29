@@ -2,10 +2,11 @@
 Shared utilities for heterogeneous parameter field inversion (Stage H).
 
 Provides:
-- InversionHeterogeneousDP2D: 2D plane-strain DP problem with per-element E field
-- Synthetic observation generator
-- High-dimensional loss function
-- Optimizer wrappers (L-BFGS-B, Adam)
+- InversionHeterogeneousDP2D: 2D plane-strain DP with per-element E field
+- Synthetic observation generation
+- Loss functions with regularization
+- Mesh/BC helpers for 2D rectangle domain
+- Log-parameterization helpers
 """
 
 import jax
@@ -14,7 +15,9 @@ import numpy as onp
 import os
 import sys
 import time
+import json
 
+# Path setup
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 jax_fem_path = os.path.join(project_root, 'jax-fem-main')
 if jax_fem_path not in sys.path:
@@ -22,219 +25,85 @@ if jax_fem_path not in sys.path:
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from jax_fem.problem import Problem
 from jax_fem.solver import solver, ad_wrapper
 from jax_fem.generate_mesh import rectangle_mesh, Mesh
+from src.models.drucker_prager_2d import DruckerPragerPlasticity2D
 
 RESULTS_DIR = os.path.join(project_root, 'results', 'heterogeneous_inversion')
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
-# Standalone 2D plane-strain DP return map (for loss post-processing)
+# Problem class: per-element E field
 # ---------------------------------------------------------------------------
 
-def _safe_divide(x, y):
-    tiny = 1e-30
-    y_safe = np.where(np.abs(y) < tiny, 1., y)
-    return np.where(np.abs(y) < tiny, 0., x / y_safe)
-
-
-def stress_return_dp_2d(u_grad_2d, sigma_old_3x3, epsilon_old_3x3, E, k):
-    """Full 3D return map from 2×2 u_grad (plane strain). Returns 3×3 stress."""
-    nu = 0.3
-    alpha = 0.3
-    a = 0.1 * k
-
-    mu = E / (2. * (1. + nu))
-    lmbda = E * nu / ((1. + nu) * (1. - 2. * nu))
-    bulk_k = lmbda + 2. * mu / 3.
-
-    u_grad = np.zeros((3, 3))
-    u_grad = u_grad.at[:2, :2].set(u_grad_2d)
-
-    epsilon_crt = 0.5 * (u_grad + u_grad.T)
-    epsilon_inc = epsilon_crt - epsilon_old_3x3
-    sigma_trial = (lmbda * np.trace(epsilon_inc) * np.eye(3)
-                   + 2. * mu * epsilon_inc + sigma_old_3x3)
-
-    I1 = np.trace(sigma_trial)
-    s_dev = sigma_trial - (I1 / 3.) * np.eye(3)
-    J2 = 0.5 * np.sum(s_dev * s_dev)
-
-    sqrt_J2_reg = np.sqrt(J2 + a * a)
-    f_yield = sqrt_J2_reg + alpha * I1 - k
-
-    f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
-    n_dev = _safe_divide(s_dev, sqrt_J2_reg)
-    denom = mu + 9. * bulk_k * alpha * alpha
-    delta_lambda = _safe_divide(f_yield_plus, denom)
-    sigma_3d = sigma_trial - delta_lambda * (
-        mu * n_dev + 3. * bulk_k * alpha * np.eye(3)
-    )
-
-    sigma_apex = (k / (3. * alpha)) * np.eye(3)
-    at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
-    sigma_3d = np.where(at_apex, sigma_apex, sigma_3d)
-    return sigma_3d
-
-
-# ---------------------------------------------------------------------------
-# H1: FEM Problem class with per-element E field
-# ---------------------------------------------------------------------------
-
-class InversionHeterogeneousDP2D(Problem):
-    """2D plane-strain DP problem with per-element E field for high-dim inversion.
-
-    params: shape (num_cells,) — each element has an independent E value.
-    k is fixed at construction time.
+class InversionHeterogeneousDP2D(DruckerPragerPlasticity2D):
+    """2D plane-strain DP with per-element E field for heterogeneous inversion.
+    
+    Overrides set_params to accept E_field of shape (num_cells,) instead of
+    scalar parameters. k is fixed at the value set during __init__.
+    
+    Supports optional traction loading via get_surface_maps (pass
+    location_fns and traction_value to __init__).
     """
 
     def __init__(self, mesh, vec=2, dim=2, ele_type='QUAD4',
-                 dirichlet_bc_info=None, E_init=70000.0, k=50.0):
-        self.E_init = E_init
-        self.k_fixed = k
-        super().__init__(mesh, vec=vec, dim=dim, ele_type=ele_type,
-                         dirichlet_bc_info=dirichlet_bc_info)
+                 dirichlet_bc_info=None, location_fns=None,
+                 E=70.0e3, nu=0.3, alpha=0.3, k=250.0, a=None,
+                 traction_value=None):
+        self.traction_value = traction_value
+        # Material params must be set before super().__init__
+        self.E = E
+        self.nu = nu
+        self.alpha = alpha
+        self.k = k
+        self.a = a if a is not None else 0.01 * k
+        self._a_ratio = self.a / self.k
+        # Dynamically add get_surface_maps only when traction is used
+        if traction_value is not None:
+            self._setup_traction(traction_value)
+        # Skip DruckerPragerPlasticity2D.__init__, call Problem directly
+        from jax_fem.problem import Problem
+        Problem.__init__(self, mesh, vec=vec, dim=dim, ele_type=ele_type,
+                         dirichlet_bc_info=dirichlet_bc_info,
+                         location_fns=location_fns)
 
-    def custom_init(self):
-        self.fe = self.fes[0]
+    def _setup_traction(self, traction_value):
+        """Dynamically add get_surface_maps for traction loading."""
+        traction = traction_value
+
+        def get_surface_maps(self_ignored=None):
+            def traction_fn(u, point):
+                return np.array([0., traction])
+            return [traction_fn]
+
+        self.get_surface_maps = get_surface_maps
+
+    def set_params(self, E_field):
+        """Set per-element Young's modulus field.
+        
+        Parameters
+        ----------
+        E_field : jax array, shape (num_cells,)
+            Young's modulus for each element.
+        """
         nc, nq = len(self.fe.cells), self.fe.num_quads
-        self.sigmas_old = np.zeros((nc, nq, 3, 3))
-        self.epsilons_old = np.zeros((nc, nq, 3, 3))
-        E_field = np.full((nc, nq, 1), self.E_init)
-        k_field = np.full((nc, nq, 1), self.k_fixed)
-        self.internal_vars = [self.sigmas_old, self.epsilons_old, E_field, k_field]
+        E_quad = np.repeat(E_field[:, None, None], nq, axis=1)  # (nc, nq, 1)
+        self.internal_vars[2] = E_quad
 
-    def set_params(self, params):
-        """params: (num_cells,) per-element E values."""
-        nc, nq = len(self.fe.cells), self.fe.num_quads
-        # Expand per-cell E to per-quadrature-point: (nc,) -> (nc, nq, 1)
-        E_field = np.repeat(params[:, None, None], nq, axis=1)
-        self.internal_vars[2] = E_field
-        # k stays fixed
-        self.internal_vars[3] = np.full((nc, nq, 1), self.k_fixed)
 
-    def get_tensor_map(self):
-        nu = 0.3
-        alpha = 0.3
-        a_ratio = 0.1
+# ---------------------------------------------------------------------------
+# Log-parameterization helpers
+# ---------------------------------------------------------------------------
 
-        def safe_divide(x, y):
-            tiny = 1e-30
-            y_safe = np.where(np.abs(y) < tiny, 1., y)
-            return np.where(np.abs(y) < tiny, 0., x / y_safe)
+def log_to_E(log_E):
+    """Convert log-parameterized values to physical E (ensures E > 0)."""
+    return np.exp(log_E)
 
-        def stress_return_map(u_grad_2d, sigma_old_3x3, epsilon_old_3x3,
-                              E_arr, k_arr):
-            E = E_arr[0]
-            k = k_arr[0]
-            a = a_ratio * k
 
-            mu = E / (2. * (1. + nu))
-            lmbda = E * nu / ((1. + nu) * (1. - 2. * nu))
-            bulk_k = lmbda + 2. * mu / 3.
-
-            u_grad = np.zeros((3, 3))
-            u_grad = u_grad.at[:2, :2].set(u_grad_2d)
-
-            epsilon_crt = 0.5 * (u_grad + u_grad.T)
-            epsilon_inc = epsilon_crt - epsilon_old_3x3
-            sigma_trial = (lmbda * np.trace(epsilon_inc) * np.eye(3)
-                           + 2. * mu * epsilon_inc + sigma_old_3x3)
-
-            I1 = np.trace(sigma_trial)
-            s_dev = sigma_trial - (I1 / 3.) * np.eye(3)
-            J2 = 0.5 * np.sum(s_dev * s_dev)
-
-            sqrt_J2_reg = np.sqrt(J2 + a * a)
-            f_yield = sqrt_J2_reg + alpha * I1 - k
-
-            f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
-            n_dev = safe_divide(s_dev, sqrt_J2_reg)
-            denom = mu + 9. * bulk_k * alpha * alpha
-            delta_lambda = safe_divide(f_yield_plus, denom)
-            sigma_3d = sigma_trial - delta_lambda * (
-                mu * n_dev + 3. * bulk_k * alpha * np.eye(3)
-            )
-
-            sigma_apex = (k / (3. * alpha)) * np.eye(3)
-            at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
-            sigma_3d = np.where(at_apex, sigma_apex, sigma_3d)
-
-            return sigma_3d[:2, :2]
-
-        return stress_return_map
-
-    def stress_strain_fns(self):
-        nu = 0.3
-        alpha = 0.3
-        a_ratio = 0.1
-
-        def safe_divide(x, y):
-            tiny = 1e-30
-            y_safe = np.where(np.abs(y) < tiny, 1., y)
-            return np.where(np.abs(y) < tiny, 0., x / y_safe)
-
-        def strain_2d_to_3d(u_grad_2d):
-            u_grad = np.zeros((3, 3))
-            u_grad = u_grad.at[:2, :2].set(u_grad_2d)
-            return 0.5 * (u_grad + u_grad.T)
-
-        def stress_return_map_3d(u_grad_2d, sigma_old_3x3, epsilon_old_3x3,
-                                 E_arr, k_arr):
-            E = E_arr[0]
-            k = k_arr[0]
-            a = a_ratio * k
-            mu = E / (2. * (1. + nu))
-            lmbda = E * nu / ((1. + nu) * (1. - 2. * nu))
-            bulk_k = lmbda + 2. * mu / 3.
-
-            epsilon_crt = strain_2d_to_3d(u_grad_2d)
-            epsilon_inc = epsilon_crt - epsilon_old_3x3
-            sigma_trial = (lmbda * np.trace(epsilon_inc) * np.eye(3)
-                           + 2. * mu * epsilon_inc + sigma_old_3x3)
-
-            I1 = np.trace(sigma_trial)
-            s_dev = sigma_trial - (I1 / 3.) * np.eye(3)
-            J2 = 0.5 * np.sum(s_dev * s_dev)
-
-            sqrt_J2_reg = np.sqrt(J2 + a * a)
-            f_yield = sqrt_J2_reg + alpha * I1 - k
-
-            f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
-            n_dev = safe_divide(s_dev, sqrt_J2_reg)
-            denom = mu + 9. * bulk_k * alpha * alpha
-            delta_lambda = safe_divide(f_yield_plus, denom)
-            sigma_3d = sigma_trial - delta_lambda * (
-                mu * n_dev + 3. * bulk_k * alpha * np.eye(3)
-            )
-
-            sigma_apex = (k / (3. * alpha)) * np.eye(3)
-            at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
-            sigma_3d = np.where(at_apex, sigma_apex, sigma_3d)
-            return sigma_3d
-
-        return jax.vmap(jax.vmap(strain_2d_to_3d)), \
-               jax.vmap(jax.vmap(stress_return_map_3d))
-
-    def update_stress_strain(self, sol):
-        u_grads = self.fe.sol_to_grad(sol)  # (nc, nq, 2, 2)
-        vmap_strain, vmap_stress_rm = self.stress_strain_fns()
-        self.sigmas_old = vmap_stress_rm(
-            u_grads, self.sigmas_old, self.epsilons_old,
-            self.internal_vars[2], self.internal_vars[3],
-        )
-        self.epsilons_old = vmap_strain(u_grads)
-        self.internal_vars = [self.sigmas_old, self.epsilons_old,
-                              self.internal_vars[2], self.internal_vars[3]]
-
-    def reset_internal_vars(self):
-        nc, nq = len(self.fe.cells), self.fe.num_quads
-        self.sigmas_old = np.zeros((nc, nq, 3, 3))
-        self.epsilons_old = np.zeros((nc, nq, 3, 3))
-        self.internal_vars[0] = self.sigmas_old
-        self.internal_vars[1] = self.epsilons_old
+def E_to_log(E):
+    """Convert physical E to log-parameterized values."""
+    return np.log(E)
 
 
 # ---------------------------------------------------------------------------
@@ -242,22 +111,39 @@ class InversionHeterogeneousDP2D(Problem):
 # ---------------------------------------------------------------------------
 
 def create_2d_mesh_and_bc(displacement, Lx=10., Ly=10., Nx=20, Ny=20):
-    """Create 2D QUAD4 mesh + compression BCs.
-
-    Returns (mesh, dirichlet_bc_info).
+    """Create 2D QUAD4 mesh with compression BCs.
+    
+    BCs:
+    - Bottom (y=0): u_y = 0
+    - Top (y=Ly): u_y = displacement
+    - Corner (x=0, y=0): u_x = 0  (remove rigid body)
+    
+    Parameters
+    ----------
+    displacement : float
+        Prescribed y-displacement at top face.
+    Lx, Ly : float
+        Domain dimensions.
+    Nx, Ny : int
+        Number of elements along each axis.
+    
+    Returns
+    -------
+    mesh : Mesh
+    dirichlet_bc_info : list
     """
     meshio_mesh = rectangle_mesh(Nx, Ny, Lx, Ly)
-    mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict['quad'],
-                ele_type='QUAD4')
+    mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict['quad'], ele_type='QUAD4')
 
     def bottom(p):
-        return np.isclose(p[1], 0.)
+        return np.isclose(p[1], 0., atol=1e-5)
 
     def top(p):
-        return np.isclose(p[1], Ly)
+        return np.isclose(p[1], Ly, atol=1e-5)
 
     def corner(p):
-        return np.logical_and(np.isclose(p[0], 0.), np.isclose(p[1], 0.))
+        return np.logical_and(np.isclose(p[0], 0., atol=1e-5),
+                              np.isclose(p[1], 0., atol=1e-5))
 
     dirichlet_bc_info = [
         [bottom, top, corner],
@@ -267,295 +153,302 @@ def create_2d_mesh_and_bc(displacement, Lx=10., Ly=10., Nx=20, Ny=20):
     return mesh, dirichlet_bc_info
 
 
-def update_bc_2d(problem, dirichlet_bc_info, disp):
-    """Update top-face displacement BC."""
-    dirichlet_bc_info[-1][1] = lambda p, _d=disp: _d
-    problem.fes[0].update_Dirichlet_boundary_conditions(dirichlet_bc_info)
-
-
-# ---------------------------------------------------------------------------
-# H2: Synthetic observation data generator
-# ---------------------------------------------------------------------------
-
-def generate_synthetic_observation(problem, fwd_pred, E_true_field,
-                                   obs_node_indices=None, noise_level=0.0,
-                                   key=None):
-    """Generate synthetic displacement observation from a known E field.
-
+def create_2d_mesh_traction_bc(traction, Lx=10., Ly=10., Nx=20, Ny=20):
+    """Create 2D QUAD4 mesh with traction loading on top face.
+    
+    With traction loading, the displacement field depends on material
+    properties (softer regions deform more), enabling E-field inversion.
+    
+    BCs:
+    - Bottom (y=0): u_x = 0, u_y = 0  (fully fixed)
+    - Top (y=Ly): applied traction (Neumann)
+    
     Parameters
     ----------
-    problem : InversionHeterogeneousDP2D
-    fwd_pred : callable from ad_wrapper
-    E_true_field : (num_cells,) true E field
-    obs_node_indices : (num_obs,) node indices for sparse observation.
-        If None, use all nodes (full-field).
-    noise_level : float, relative Gaussian noise std
-    key : jax.random.PRNGKey (required if noise_level > 0)
-
+    traction : float
+        Applied y-traction on top face [MPa] (negative = compression).
+    Lx, Ly : float
+        Domain dimensions.
+    Nx, Ny : int
+        Number of elements along each axis.
+    
     Returns
     -------
-    obs_data : (num_obs, vec) observed displacements
-    obs_indices : (num_obs,) node indices used
-    sol_true : full displacement solution
+    mesh : Mesh
+    dirichlet_bc_info : list
+    location_fns : list
+        Surface location functions for Neumann BC.
+    traction_value : float
+        The traction value (stored for reference).
     """
-    sol_list = fwd_pred(E_true_field)
-    sol_true = sol_list[0]  # (num_nodes, vec)
+    meshio_mesh = rectangle_mesh(Nx, Ny, Lx, Ly)
+    mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict['quad'], ele_type='QUAD4')
+
+    def bottom(p):
+        return np.isclose(p[1], 0., atol=1e-5)
+
+    dirichlet_bc_info = [
+        [bottom, bottom],
+        [0, 1],
+        [lambda p: 0., lambda p: 0.],
+    ]
+
+    def top_surface(p):
+        return np.isclose(p[1], Ly, atol=1e-5)
+
+    location_fns = [top_surface]
+
+    return mesh, dirichlet_bc_info, location_fns, traction
+
+
+def get_cell_centroids(mesh):
+    """Compute centroids of all cells.
+    
+    Parameters
+    ----------
+    mesh : Mesh
+    
+    Returns
+    -------
+    centroids : onp array, shape (num_cells, dim)
+    """
+    return onp.mean(onp.take(mesh.points, mesh.cells, axis=0), axis=1)
+
+
+# ---------------------------------------------------------------------------
+# Synthetic observation generation
+# ---------------------------------------------------------------------------
+
+def generate_synthetic_observation(E_true_field, k_fixed,
+                                   traction=-50.0,
+                                   Lx=10., Ly=10., Nx=20, Ny=20,
+                                   obs_node_indices=None, noise_level=0.0,
+                                   solver_options=None,
+                                   nu=0.3, alpha=0.3):
+    """Generate synthetic displacement observation from a known E field.
+    
+    Uses traction loading (Neumann BC) so that the displacement field
+    depends on material stiffness — softer regions deform more.
+    
+    Parameters
+    ----------
+    E_true_field : array, shape (num_cells,)
+        True per-element Young's modulus field.
+    k_fixed : float
+        Fixed cohesion parameter.
+    traction : float
+        Applied y-traction on top face [MPa] (negative = compression).
+    obs_node_indices : array or None
+        Node indices for observation. None = all nodes (full-field).
+    noise_level : float
+        Gaussian noise std as fraction of max displacement magnitude.
+    solver_options : dict or None
+    
+    Returns
+    -------
+    dict with keys:
+        'u_obs': observed displacement, shape (n_obs, 2) or (n_nodes, 2)
+        'obs_indices': node indices used
+        'u_full': full displacement field (for plotting)
+        'mesh': the mesh object
+        'dirichlet_bc_info': BC info
+        'location_fns': surface location functions
+    """
+    if solver_options is None:
+        solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
+
+    mesh, bc_info, loc_fns, trac = create_2d_mesh_traction_bc(
+        traction, Lx, Ly, Nx, Ny)
+
+    truth_problem = InversionHeterogeneousDP2D(
+        mesh, vec=2, dim=2, ele_type='QUAD4',
+        dirichlet_bc_info=bc_info,
+        location_fns=loc_fns,
+        E=70000., nu=nu, alpha=alpha, k=k_fixed,
+        traction_value=traction,
+    )
+    truth_problem.set_params(np.array(E_true_field))
+    sol_list = solver(truth_problem, solver_options=solver_options)
+    u_full = sol_list[0]  # (num_nodes, 2)
 
     if obs_node_indices is None:
-        obs_indices = np.arange(sol_true.shape[0])
+        obs_indices = onp.arange(u_full.shape[0])
     else:
-        obs_indices = obs_node_indices
+        obs_indices = onp.array(obs_node_indices)
 
-    obs_data = sol_true[obs_indices]
+    u_obs = u_full[obs_indices]
 
-    if noise_level > 0.0 and key is not None:
-        noise_scale = noise_level * np.max(np.abs(obs_data))
-        noise = noise_scale * jax.random.normal(key, obs_data.shape)
-        obs_data = obs_data + noise
-
-    return obs_data, obs_indices, sol_true
-
-
-# ---------------------------------------------------------------------------
-# H3: High-dimensional loss function
-# ---------------------------------------------------------------------------
-
-def displacement_loss(E_field, problem, fwd_pred, obs_data, obs_indices,
-                      regularizer=None, reg_weight=0.0):
-    """Loss = ||u_FEM(E) - u_obs||^2 + lambda * R(E).
-
-    Parameters
-    ----------
-    E_field : (num_cells,) per-element E values
-    obs_data : (num_obs, vec) observed displacements
-    obs_indices : (num_obs,) observation node indices
-    regularizer : callable(E_field) -> scalar, or None
-    reg_weight : float, regularization weight lambda
-
-    Returns
-    -------
-    loss : scalar
-    """
-    sol_list = fwd_pred(E_field)
-    u_pred = sol_list[0][obs_indices]
-    data_misfit = np.sum((u_pred - obs_data) ** 2)
-
-    reg_term = 0.0
-    if regularizer is not None:
-        reg_term = reg_weight * regularizer(E_field)
-
-    return data_misfit + reg_term
-
-
-# ---------------------------------------------------------------------------
-# H4: Optimizer wrappers
-# ---------------------------------------------------------------------------
-
-def softplus_parameterization(theta, E_min=1000.0):
-    """Map unconstrained theta -> E > E_min via softplus."""
-    return E_min + jax.nn.softplus(theta)
-
-
-def inv_softplus(E, E_min=1000.0):
-    """Inverse of softplus parameterization: E -> theta."""
-    x = E - E_min
-    x = np.maximum(x, 1e-6)
-    return np.log(np.exp(x) - 1.)
-
-
-def optimize_lbfgsb(loss_fn, E_init, E_min=1000.0, E_max=500000.0,
-                     maxiter=100, verbose=True):
-    """L-BFGS-B optimizer with parameter bounds.
-
-    Parameters
-    ----------
-    loss_fn : callable(E_field) -> scalar (must be JAX-differentiable)
-    E_init : (num_cells,) initial E field
-    E_min, E_max : float, bounds
-    maxiter : int
-
-    Returns
-    -------
-    result : dict with keys 'E_final', 'loss_history', 'time_s', 'nit'
-    """
-    import scipy.optimize
-
-    value_and_grad_fn = jax.value_and_grad(loss_fn)
-
-    # Warm up JIT
-    _ = value_and_grad_fn(E_init)
-
-    history = {'loss': [], 'grad_norm': []}
-
-    big_loss = 1e10
-
-    def objective(E_flat):
-        E_jax = np.array(E_flat)
-        try:
-            loss_val, grad = value_and_grad_fn(E_jax)
-            loss_val = float(loss_val)
-            grad_np = onp.array(grad, dtype=onp.float64)
-            if onp.isnan(loss_val) or onp.any(onp.isnan(grad_np)):
-                raise ValueError("NaN in loss or gradient")
-        except Exception:
-            loss_val = big_loss
-            grad_np = onp.zeros_like(E_flat)
-        history['loss'].append(loss_val)
-        history['grad_norm'].append(float(onp.linalg.norm(grad_np)))
-        if verbose and len(history['loss']) % 10 == 1:
-            print(f"  iter {len(history['loss']):4d}: "
-                  f"loss = {loss_val:.6e}, |grad| = {history['grad_norm'][-1]:.4e}")
-        return loss_val, grad_np
-
-    bounds = [(E_min, E_max)] * len(E_init)
-
-    t0 = time.time()
-    res = scipy.optimize.minimize(
-        objective, onp.array(E_init, dtype=onp.float64),
-        method='L-BFGS-B', jac=True, bounds=bounds,
-        options={'maxiter': maxiter, 'ftol': 1e-20, 'gtol': 1e-12},
-    )
-    elapsed = time.time() - t0
-
-    if verbose:
-        print(f"  L-BFGS-B finished: {res.nit} iters, {elapsed:.1f}s, "
-              f"success={res.success}")
+    if noise_level > 0.0:
+        max_disp = float(np.max(np.abs(u_full)))
+        noise = noise_level * max_disp * jax.random.normal(
+            jax.random.PRNGKey(42), u_obs.shape)
+        u_obs = u_obs + noise
 
     return {
-        'E_final': np.array(res.x),
-        'loss_history': history['loss'],
-        'grad_norm_history': history['grad_norm'],
-        'time_s': elapsed,
-        'nit': res.nit,
-        'success': res.success,
-    }
-
-
-def optimize_adam(loss_fn, E_init, num_iters=200, lr=500.0,
-                  E_min=1000.0, E_max=500000.0, verbose=True):
-    """Adam optimizer with clamping.
-
-    Parameters
-    ----------
-    loss_fn : callable(E_field) -> scalar
-    E_init : (num_cells,) initial E field
-    num_iters : int
-    lr : float
-    E_min, E_max : clamp bounds
-
-    Returns
-    -------
-    result : dict
-    """
-    value_and_grad_fn = jax.value_and_grad(loss_fn)
-
-    # Warm up JIT
-    _ = value_and_grad_fn(E_init)
-
-    m = onp.zeros_like(E_init)
-    v = onp.zeros_like(E_init)
-    params = onp.array(E_init, dtype=onp.float64)
-    beta1, beta2, eps = 0.9, 0.999, 1e-8
-
-    history = {'loss': [], 'grad_norm': [], 'params_snapshots': []}
-
-    t0 = time.time()
-    for i in range(num_iters):
-        loss_val, grad = value_and_grad_fn(np.array(params))
-        grad = onp.array(grad)
-        loss_val = float(loss_val)
-
-        m = beta1 * m + (1 - beta1) * grad
-        v = beta2 * v + (1 - beta2) * grad ** 2
-        m_hat = m / (1 - beta1 ** (i + 1))
-        v_hat = v / (1 - beta2 ** (i + 1))
-
-        params = params - lr * m_hat / (onp.sqrt(v_hat) + eps)
-        params = onp.clip(params, E_min, E_max)
-
-        history['loss'].append(loss_val)
-        history['grad_norm'].append(float(onp.linalg.norm(grad)))
-
-        if verbose and (i % 20 == 0 or i == num_iters - 1):
-            print(f"  Adam iter {i:4d}: loss = {loss_val:.6e}, "
-                  f"|grad| = {history['grad_norm'][-1]:.4e}")
-
-    elapsed = time.time() - t0
-
-    return {
-        'E_final': np.array(params),
-        'loss_history': history['loss'],
-        'grad_norm_history': history['grad_norm'],
-        'time_s': elapsed,
-        'nit': num_iters,
+        'u_obs': u_obs,
+        'obs_indices': obs_indices,
+        'u_full': u_full,
+        'mesh': mesh,
+        'dirichlet_bc_info': bc_info,
+        'location_fns': loc_fns,
     }
 
 
 # ---------------------------------------------------------------------------
-# Visualization helpers
+# Loss functions
 # ---------------------------------------------------------------------------
 
-def plot_E_field_comparison(E_true, E_inverted, Nx, Ny, Lx, Ly,
-                            title='', save_path=None):
-    """Plot true vs inverted E field side by side."""
+def make_heterogeneous_loss(fwd_pred, u_obs, obs_indices,
+                             regularizer=None, reg_weight=0.0):
+    """Create a loss function for heterogeneous inversion.
+    
+    Parameters
+    ----------
+    fwd_pred : callable
+        AD-wrapped forward prediction from ad_wrapper.
+    u_obs : array, shape (n_obs, 2)
+        Observed displacement.
+    obs_indices : array
+        Node indices of observations.
+    regularizer : callable or None
+        R(log_E) -> scalar. Applied to log_E (not physical E).
+    reg_weight : float
+        Regularization weight lambda.
+    
+    Returns
+    -------
+    loss_fn : callable
+        loss_fn(log_E) -> scalar loss value.
+    """
+    n_obs_dofs = u_obs.shape[0] * u_obs.shape[1]
+
+    def loss_fn(log_E):
+        E_field = log_to_E(log_E)
+        sol = fwd_pred(E_field)[0]
+        u_pred = sol[obs_indices]
+        data_misfit = np.sum((u_pred - u_obs) ** 2) / n_obs_dofs
+
+        reg_term = 0.0
+        if regularizer is not None and reg_weight > 0.0:
+            reg_term = reg_weight * regularizer(log_E)
+
+        return data_misfit + reg_term
+
+    return loss_fn
+
+
+# ---------------------------------------------------------------------------
+# Regularizers (simple structured-grid versions)
+# ---------------------------------------------------------------------------
+
+def smoothness_regularizer(Nx, Ny):
+    """Squared first-difference regularizer on structured grid.
+    
+    Works on log_E reshaped as (Nx, Ny) grid.
+    Note: rectangle_mesh uses indexing='ij', so cells are ordered as
+    cell_index = ix * Ny + iy, where ix is x-index and iy is y-index.
+    
+    Parameters
+    ----------
+    Nx, Ny : int
+        Grid dimensions (number of elements).
+    
+    Returns
+    -------
+    regularizer : callable
+        regularizer(log_E) -> scalar
+    """
+    def regularizer(log_E):
+        g = log_E.reshape(Nx, Ny)
+        dx = g[1:, :] - g[:-1, :]
+        dy = g[:, 1:] - g[:, :-1]
+        return np.mean(dx ** 2) + np.mean(dy ** 2)
+
+    return regularizer
+
+
+# ---------------------------------------------------------------------------
+# E field generators (for truth / initial guess)
+# ---------------------------------------------------------------------------
+
+def two_region_E_field(Nx, Ny, E_left=50000., E_right=90000.):
+    """Create a two-region E field: left half = E_left, right half = E_right.
+    
+    Cell ordering: cell_index = ix * Ny + iy (from rectangle_mesh).
+    Left = ix < Nx//2, Right = ix >= Nx//2.
+    """
+    E = onp.full(Nx * Ny, E_right)
+    for ix in range(Nx // 2):
+        for iy in range(Ny):
+            E[ix * Ny + iy] = E_left
+    return E
+
+
+def uniform_E_field(Nx, Ny, E_val=70000.):
+    """Create a uniform E field."""
+    return onp.full(Nx * Ny, E_val)
+
+
+def layered_E_field(Nx, Ny, E_values, layer_boundaries):
+    """Create a horizontally layered E field.
+    
+    Parameters
+    ----------
+    E_values : list of float
+        E value for each layer (from bottom to top).
+    layer_boundaries : list of float
+        Normalized y-boundaries between layers (e.g., [0.3, 0.7] for 3 layers).
+    """
+    E = onp.zeros(Nx * Ny)
+    for ix in range(Nx):
+        for iy in range(Ny):
+            y_frac = (iy + 0.5) / Ny
+            layer_idx = 0
+            for b in layer_boundaries:
+                if y_frac > b:
+                    layer_idx += 1
+            E[ix * Ny + iy] = E_values[min(layer_idx, len(E_values) - 1)]
+    return E
+
+
+# ---------------------------------------------------------------------------
+# Plotting helpers
+# ---------------------------------------------------------------------------
+
+def plot_E_field(E_field, Nx, Ny, ax=None, title='E field', vmin=None, vmax=None):
+    """Plot an E field on a structured grid.
+    
+    Cell ordering: cell_index = ix * Ny + iy.
+    Reshape to (Nx, Ny) and transpose for display (x=horizontal, y=vertical).
+    """
     import matplotlib.pyplot as plt
-
-    E_true_2d = onp.array(E_true).reshape(Nx, Ny)
-    E_inv_2d = onp.array(E_inverted).reshape(Nx, Ny)
-
-    vmin = min(E_true_2d.min(), E_inv_2d.min())
-    vmax = max(E_true_2d.max(), E_inv_2d.max())
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-
-    im0 = axes[0].imshow(E_true_2d.T, origin='lower', vmin=vmin, vmax=vmax,
-                          extent=[0, Lx, 0, Ly], cmap='viridis')
-    axes[0].set_title('True E field')
-    axes[0].set_xlabel('x')
-    axes[0].set_ylabel('y')
-    plt.colorbar(im0, ax=axes[0])
-
-    im1 = axes[1].imshow(E_inv_2d.T, origin='lower', vmin=vmin, vmax=vmax,
-                          extent=[0, Lx, 0, Ly], cmap='viridis')
-    axes[1].set_title('Inverted E field')
-    axes[1].set_xlabel('x')
-    axes[1].set_ylabel('y')
-    plt.colorbar(im1, ax=axes[1])
-
-    err_2d = onp.abs(E_inv_2d - E_true_2d)
-    im2 = axes[2].imshow(err_2d.T, origin='lower',
-                          extent=[0, Lx, 0, Ly], cmap='hot')
-    axes[2].set_title('Absolute error')
-    axes[2].set_xlabel('x')
-    axes[2].set_ylabel('y')
-    plt.colorbar(im2, ax=axes[2])
-
-    if title:
-        fig.suptitle(title, fontsize=14)
-    plt.tight_layout()
-
-    if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"  Saved plot: {save_path}")
-    plt.close()
+    if ax is None:
+        fig, ax = plt.subplots()
+    
+    grid = onp.array(E_field).reshape(Nx, Ny).T  # Transpose: x=col, y=row
+    im = ax.imshow(grid, origin='lower', aspect='equal',
+                   vmin=vmin, vmax=vmax, cmap='viridis')
+    ax.set_xlabel('x element index')
+    ax.set_ylabel('y element index')
+    ax.set_title(title)
+    plt.colorbar(im, ax=ax, label='E [MPa]')
+    return im
 
 
-def compute_inversion_metrics(E_true, E_inverted):
-    """Compute error metrics between true and inverted E fields."""
-    E_true = onp.array(E_true)
-    E_inverted = onp.array(E_inverted)
-
-    abs_err = onp.abs(E_inverted - E_true)
-    rel_err = abs_err / onp.maximum(E_true, 1e-12)
-
-    l2_err = onp.sqrt(onp.sum((E_inverted - E_true) ** 2) / onp.sum(E_true ** 2))
-    max_rel_err = onp.max(rel_err)
-    mean_rel_err = onp.mean(rel_err)
-
-    return {
-        'L2_relative_error': float(l2_err),
-        'max_relative_error': float(max_rel_err),
-        'mean_relative_error': float(mean_rel_err),
-        'max_absolute_error': float(onp.max(abs_err)),
-    }
+def save_results(out_dir, results_dict):
+    """Save results as JSON (handles numpy types)."""
+    os.makedirs(out_dir, exist_ok=True)
+    
+    def convert(obj):
+        if isinstance(obj, (onp.integer, onp.floating)):
+            return float(obj)
+        if isinstance(obj, onp.ndarray):
+            return obj.tolist()
+        if hasattr(obj, '__jax_array__') or str(type(obj)).startswith("<class 'jax"):
+            return onp.array(obj).tolist()
+        return obj
+    
+    path = os.path.join(out_dir, 'results.json')
+    with open(path, 'w') as f:
+        json.dump(results_dict, f, indent=2, default=convert)
+    return path

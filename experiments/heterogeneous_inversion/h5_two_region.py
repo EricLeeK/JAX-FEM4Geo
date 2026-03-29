@@ -1,15 +1,17 @@
+#!/usr/bin/env python
 """
-H5: First high-dimensional inversion experiment — two-region E field.
+H5: First heterogeneous inversion experiment — Two-region E field.
 
 Setup:
-- 2D rectangular domain 10×10, 20×20 QUAD4 mesh (400 elements)
-- True E field: left half E=50000, right half E=90000
-- Fixed k=50
-- Top compression BC, full-field displacement observation
-- No regularization
-- L-BFGS-B optimizer
+- 20×20 QUAD4 mesh (400 elements), 10×10 domain
+- True E: left half = 50000 MPa, right half = 90000 MPa
+- Fixed k = 50 MPa
+- Observation: full-field displacement, no noise
+- Optimizer: L-BFGS-B in log-E space
+- Initial guess: uniform E = 70000 MPa
 
-Expected: recover the two-region interface.
+This validates that the heterogeneous inversion framework can recover
+a sharp two-region interface from displacement data.
 """
 
 import jax
@@ -18,185 +20,314 @@ import numpy as onp
 import os
 import sys
 import time
-import json
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-jax_fem_path = os.path.join(project_root, 'jax-fem-main')
-if jax_fem_path not in sys.path:
-    sys.path.append(jax_fem_path)
-if project_root not in sys.path:
-    sys.path.append(project_root)
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
 
 from common import (
     InversionHeterogeneousDP2D,
-    create_2d_mesh_and_bc,
+    create_2d_mesh_traction_bc,
     generate_synthetic_observation,
-    displacement_loss,
-    optimize_lbfgsb,
-    optimize_adam,
-    plot_E_field_comparison,
-    compute_inversion_metrics,
+    make_heterogeneous_loss,
+    smoothness_regularizer,
+    two_region_E_field,
+    uniform_E_field,
+    log_to_E,
+    E_to_log,
+    get_cell_centroids,
+    plot_E_field,
+    save_results,
     RESULTS_DIR,
 )
+
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
+jax_fem_path = os.path.join(project_root, 'jax-fem-main')
+if jax_fem_path not in sys.path:
+    sys.path.append(jax_fem_path)
 from jax_fem.solver import ad_wrapper
 
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+Nx, Ny = 20, 20
+Lx, Ly = 10., 10.
+TRACTION = -50.0  # Compressive traction on top [MPa]
+K_FIXED = 50.0
+E_LEFT, E_RIGHT = 50000., 90000.
+E_INIT = 70000.
+REG_WEIGHT = 0.0  # No regularization for first test (sharp interface)
 
-def build_two_region_E_field(Nx, Ny):
-    """Left half E=50000, right half E=90000. Cell ordering follows rectangle_mesh."""
-    nc = Nx * Ny
-    E_field = onp.full(nc, 90000.0)
-    for ix in range(Nx):
-        for iy in range(Ny):
-            cell_idx = ix * Ny + iy
-            if ix < Nx // 2:
-                E_field[cell_idx] = 50000.0
-    return np.array(E_field)
+SOLVER_OPTIONS = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
+OUT_DIR = os.path.join(RESULTS_DIR, 'h5_two_region')
+os.makedirs(OUT_DIR, exist_ok=True)
+
+NUM_CELLS = Nx * Ny
 
 
-def run_two_region_experiment(Nx=20, Ny=20, displacement=-0.01,
-                               optimizer='lbfgs', maxiter=100):
-    """Run the two-region inversion experiment."""
+def main():
     print("=" * 70)
-    print("H5: Two-Region Heterogeneous E Field Inversion")
+    print("H5: HETEROGENEOUS INVERSION — TWO-REGION E FIELD")
+    print(f"  Mesh: {Nx}×{Ny} = {NUM_CELLS} elements")
+    print(f"  True E: left={E_LEFT}, right={E_RIGHT}")
+    print(f"  Fixed k = {K_FIXED}")
+    print(f"  Traction = {TRACTION} MPa")
     print("=" * 70)
+    t0_total = time.time()
 
-    Lx, Ly = 10., 10.
-    k_fixed = 50.0
+    # --- Step 1: Generate synthetic observation ---
+    print("\n[1] Generating synthetic observation...")
+    E_true = two_region_E_field(Nx, Ny, E_LEFT, E_RIGHT)
+    print(f"  E_true: min={E_true.min():.0f}, max={E_true.max():.0f}")
 
-    # --- Build true E field ---
-    E_true = build_two_region_E_field(Nx, Ny)
-    nc = Nx * Ny
-    print(f"\nProblem setup:")
-    print(f"  Mesh: {Nx}×{Ny} = {nc} QUAD4 elements")
-    print(f"  Domain: {Lx}×{Ly}")
-    print(f"  Displacement: {displacement}")
-    print(f"  k (fixed): {k_fixed}")
-    print(f"  True E: left={float(E_true[0]):.0f}, right={float(E_true[-1]):.0f}")
-    print(f"  Optimizer: {optimizer}")
-    print(f"  Parameters to invert: {nc}")
+    obs_data = generate_synthetic_observation(
+        E_true_field=E_true,
+        k_fixed=K_FIXED,
+        traction=TRACTION,
+        Lx=Lx, Ly=Ly, Nx=Nx, Ny=Ny,
+        obs_node_indices=None,  # full-field
+        noise_level=0.0,
+        solver_options=SOLVER_OPTIONS,
+    )
+    u_obs = obs_data['u_obs']
+    obs_indices = obs_data['obs_indices']
+    u_full_true = obs_data['u_full']
+    print(f"  Observation: {u_obs.shape[0]} nodes, ||u_obs|| = {float(np.linalg.norm(u_obs)):.6e}")
 
-    # --- Create mesh and problem ---
-    mesh, bc_info = create_2d_mesh_and_bc(displacement, Lx=Lx, Ly=Ly, Nx=Nx, Ny=Ny)
-    problem = InversionHeterogeneousDP2D(
+    # --- Step 2: Set up inversion problem ---
+    print("\n[2] Setting up inversion problem...")
+    mesh, bc_info, loc_fns, _ = create_2d_mesh_traction_bc(
+        TRACTION, Lx, Ly, Nx, Ny)
+
+    inv_problem = InversionHeterogeneousDP2D(
         mesh, vec=2, dim=2, ele_type='QUAD4',
-        dirichlet_bc_info=bc_info, E_init=70000.0, k=k_fixed,
+        dirichlet_bc_info=bc_info,
+        location_fns=loc_fns,
+        E=E_INIT, nu=0.3, alpha=0.3, k=K_FIXED,
+        traction_value=TRACTION,
+    )
+    fwd_pred = ad_wrapper(inv_problem, solver_options=SOLVER_OPTIONS,
+                          adjoint_solver_options=SOLVER_OPTIONS)
+
+    # Build loss function (in log-E space)
+    reg_fn = smoothness_regularizer(Nx, Ny) if REG_WEIGHT > 0 else None
+    loss_fn = make_heterogeneous_loss(
+        fwd_pred, u_obs, obs_indices,
+        regularizer=reg_fn, reg_weight=REG_WEIGHT,
     )
 
-    solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
-    fwd_pred = ad_wrapper(problem, solver_options=solver_options,
-                          adjoint_solver_options=solver_options)
+    value_and_grad_fn = jax.value_and_grad(loss_fn)
 
-    # --- Generate synthetic observation ---
-    print("\nGenerating synthetic observation...")
-    t0 = time.time()
-    obs_data, obs_indices, sol_true = generate_synthetic_observation(
-        problem, fwd_pred, E_true,
+    # --- Step 3: Warm up JIT ---
+    print("\n[3] Warming up JIT...")
+    log_E_init = E_to_log(uniform_E_field(Nx, Ny, E_INIT))
+    t_warmup_start = time.time()
+    loss_val, grad_val = value_and_grad_fn(np.array(log_E_init))
+    t_warmup = time.time() - t_warmup_start
+    print(f"  Initial loss: {float(loss_val):.6e}")
+    print(f"  ||grad||: {float(np.linalg.norm(grad_val)):.6e}")
+    print(f"  JIT warmup: {t_warmup:.1f}s")
+
+    # --- Step 4: L-BFGS-B optimization ---
+    print("\n[4] Running L-BFGS-B optimization...")
+    from scipy.optimize import minimize as scipy_minimize
+
+    history = {'loss': [], 'grad_norm': [], 'wallclock': []}
+    t_opt_start = time.time()
+
+    # Bounds in log-space: E in [1000, 500000] -> log_E in [log(1000), log(500000)]
+    log_E_lo = float(onp.log(1000.))
+    log_E_hi = float(onp.log(500000.))
+    bounds = [(log_E_lo, log_E_hi)] * NUM_CELLS
+
+    def objective(x):
+        """Scipy-compatible objective: returns (loss, grad) as float64 arrays."""
+        log_E = np.array(x)
+        loss, grad = value_and_grad_fn(log_E)
+        loss_f = float(loss)
+        grad_np = onp.array(grad, dtype=onp.float64)
+        grad_norm = float(onp.linalg.norm(grad_np))
+
+        history['loss'].append(loss_f)
+        history['grad_norm'].append(grad_norm)
+        history['wallclock'].append(time.time() - t_opt_start)
+
+        step = len(history['loss'])
+        if step <= 5 or step % 10 == 0:
+            E_cur = onp.exp(x)
+            print(f"    Eval {step:4d}: loss={loss_f:.6e}  "
+                  f"||grad||={grad_norm:.3e}  "
+                  f"E range=[{E_cur.min():.0f}, {E_cur.max():.0f}]")
+
+        return loss_f, grad_np
+
+    result = scipy_minimize(
+        objective,
+        x0=onp.array(log_E_init, dtype=onp.float64),
+        method='L-BFGS-B',
+        jac=True,
+        bounds=bounds,
+        options={'maxiter': 200, 'maxfun': 500, 'ftol': 1e-20, 'gtol': 1e-10},
     )
-    print(f"  Forward solve: {time.time() - t0:.2f}s")
-    print(f"  Observation: {obs_data.shape[0]} nodes × {obs_data.shape[1]} components")
-    print(f"  Max displacement: {float(np.max(np.abs(sol_true))):.6e}")
 
-    # --- Define loss ---
-    def loss_fn(E_field):
-        return displacement_loss(E_field, problem, fwd_pred, obs_data, obs_indices)
+    t_opt = time.time() - t_opt_start
+    log_E_final = result.x
+    E_final = onp.exp(log_E_final)
 
-    # --- Quick sanity: loss at true params should be ~0 ---
-    loss_at_true = float(loss_fn(E_true))
-    print(f"\n  Loss at true E: {loss_at_true:.6e} (should be ~0)")
+    print(f"\n  Optimization completed:")
+    print(f"    Converged: {result.success}")
+    print(f"    Message: {result.message}")
+    print(f"    Iterations: {result.nit}")
+    print(f"    Function evaluations: {result.nfev}")
+    print(f"    Time: {t_opt:.1f}s")
+    print(f"    Final loss: {result.fun:.6e}")
 
-    # --- Initial guess: uniform E = 70000 ---
-    E_init = np.full(nc, 70000.0)
-    loss_at_init = float(loss_fn(E_init))
-    print(f"  Loss at init E: {loss_at_init:.6e}")
+    # --- Step 5: Evaluate results ---
+    print("\n[5] Evaluating results...")
+    E_true_arr = onp.array(E_true)
+    E_error = onp.abs(E_final - E_true_arr)
+    E_rel_error = E_error / E_true_arr
+    l2_error = float(onp.sqrt(onp.mean(E_error ** 2)))
+    l2_rel_error = float(onp.sqrt(onp.mean(E_rel_error ** 2)))
+    max_error = float(onp.max(E_error))
+    max_rel_error = float(onp.max(E_rel_error))
+    mean_error = float(onp.mean(E_error))
 
-    # --- Gradient check: verify gradient is non-zero ---
-    print("\nGradient check...")
-    t0 = time.time()
-    grad = jax.grad(loss_fn)(E_init)
-    print(f"  Grad computed in {time.time() - t0:.2f}s")
-    print(f"  |grad|: {float(np.linalg.norm(grad)):.4e}")
-    print(f"  grad range: [{float(np.min(grad)):.4e}, {float(np.max(grad)):.4e}]")
+    print(f"  E field recovery:")
+    print(f"    E_true:  [{E_true_arr.min():.0f}, {E_true_arr.max():.0f}]")
+    print(f"    E_inv:   [{E_final.min():.0f}, {E_final.max():.0f}]")
+    print(f"    L2 error (abs): {l2_error:.2f} MPa")
+    print(f"    L2 error (rel): {l2_rel_error:.4%}")
+    print(f"    Max error (abs): {max_error:.2f} MPa")
+    print(f"    Max error (rel): {max_rel_error:.4%}")
+    print(f"    Mean error (abs): {mean_error:.2f} MPa")
 
-    # --- Run inversion ---
-    print(f"\nRunning {optimizer} optimization (maxiter={maxiter})...")
-    if optimizer == 'lbfgs':
-        result = optimize_lbfgsb(loss_fn, E_init, E_min=10000.0, E_max=200000.0,
-                                  maxiter=maxiter)
-    else:
-        result = optimize_adam(loss_fn, E_init, num_iters=maxiter, lr=500.0,
-                               E_min=10000.0, E_max=200000.0)
-
-    E_final = result['E_final']
-
-    # --- Metrics ---
-    metrics = compute_inversion_metrics(E_true, E_final)
-    print(f"\nInversion results:")
-    print(f"  Final loss: {result['loss_history'][-1]:.6e}")
-    print(f"  L2 relative error: {metrics['L2_relative_error']:.4e}")
-    print(f"  Mean relative error: {metrics['mean_relative_error']:.4e}")
-    print(f"  Max relative error: {metrics['max_relative_error']:.4e}")
-    print(f"  Time: {result['time_s']:.1f}s")
-    print(f"  Iterations: {result['nit']}")
-
-    # --- E field statistics ---
-    E_final_np = onp.array(E_final)
-    left_mask = onp.array(E_true) < 70000
+    # Left/right region accuracy
+    left_mask = E_true_arr < (E_LEFT + E_RIGHT) / 2
     right_mask = ~left_mask
-    print(f"\n  Left region (true=50000):")
-    print(f"    mean={E_final_np[left_mask].mean():.1f}, "
-          f"std={E_final_np[left_mask].std():.1f}")
-    print(f"  Right region (true=90000):")
-    print(f"    mean={E_final_np[right_mask].mean():.1f}, "
-          f"std={E_final_np[right_mask].std():.1f}")
+    left_err = float(onp.mean(onp.abs(E_final[left_mask] - E_LEFT) / E_LEFT))
+    right_err = float(onp.mean(onp.abs(E_final[right_mask] - E_RIGHT) / E_RIGHT))
+    print(f"    Left region (E={E_LEFT:.0f}) mean rel error: {left_err:.4%}")
+    print(f"    Right region (E={E_RIGHT:.0f}) mean rel error: {right_err:.4%}")
 
-    # --- Save results ---
-    exp_dir = os.path.join(RESULTS_DIR, 'h5_two_region')
-    os.makedirs(exp_dir, exist_ok=True)
+    # --- Step 6: Plotting ---
+    print("\n[6] Generating plots...")
+    vmin = min(E_LEFT, E_final.min()) * 0.95
+    vmax = max(E_RIGHT, E_final.max()) * 1.05
 
-    plot_E_field_comparison(
-        E_true, E_final, Nx, Ny, Lx, Ly,
-        title=f'H5: Two-Region Inversion ({Nx}×{Ny}, {optimizer})',
-        save_path=os.path.join(exp_dir, f'E_field_{optimizer}.png'),
-    )
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 
-    # Convergence plot
-    try:
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.semilogy(result['loss_history'])
-        ax.set_xlabel('Iteration')
-        ax.set_ylabel('Loss')
-        ax.set_title('H5: Convergence')
-        ax.grid(True)
-        plt.tight_layout()
-        plt.savefig(os.path.join(exp_dir, f'convergence_{optimizer}.png'),
-                    dpi=150, bbox_inches='tight')
-        plt.close()
-    except ImportError:
-        pass
+    # True E field
+    plot_E_field(E_true, Nx, Ny, ax=axes[0, 0], title='True E field',
+                 vmin=vmin, vmax=vmax)
 
-    # Save metrics to JSON
-    save_data = {
-        'Nx': Nx, 'Ny': Ny, 'num_cells': nc,
-        'displacement': displacement, 'k_fixed': k_fixed,
-        'optimizer': optimizer, 'maxiter': maxiter,
-        'metrics': metrics,
-        'time_s': result['time_s'],
-        'nit': result['nit'],
-        'final_loss': result['loss_history'][-1],
-        'loss_at_true': loss_at_true,
-        'left_region_mean': float(E_final_np[left_mask].mean()),
-        'right_region_mean': float(E_final_np[right_mask].mean()),
+    # Recovered E field
+    plot_E_field(E_final, Nx, Ny, ax=axes[0, 1], title='Recovered E field',
+                 vmin=vmin, vmax=vmax)
+
+    # Error field
+    plot_E_field(E_error, Nx, Ny, ax=axes[0, 2], title='|E_true - E_inv| error')
+
+    # Convergence curve
+    ax = axes[1, 0]
+    ax.semilogy(history['wallclock'], history['loss'], 'b-', linewidth=1.5)
+    ax.set_xlabel('Wall-clock time [s]')
+    ax.set_ylabel('Loss')
+    ax.set_title('Convergence: Loss vs Time')
+    ax.grid(True, alpha=0.3)
+
+    # Gradient norm
+    ax = axes[1, 1]
+    ax.semilogy(range(1, len(history['grad_norm']) + 1),
+                history['grad_norm'], 'r-', linewidth=1.5)
+    ax.set_xlabel('Evaluation')
+    ax.set_ylabel('||grad||')
+    ax.set_title('Gradient Norm')
+    ax.grid(True, alpha=0.3)
+
+    # Line cut at mid-height (iy = Ny//2)
+    ax = axes[1, 2]
+    iy_mid = Ny // 2
+    E_true_line = E_true_arr.reshape(Nx, Ny)[:, iy_mid]
+    E_inv_line = E_final.reshape(Nx, Ny)[:, iy_mid]
+    x_centers = onp.linspace(Lx / (2 * Nx), Lx - Lx / (2 * Nx), Nx)
+    ax.plot(x_centers, E_true_line, 'k-', linewidth=2, label='True')
+    ax.plot(x_centers, E_inv_line, 'b--o', markersize=3, linewidth=1.5, label='Inverted')
+    ax.set_xlabel('x [m]')
+    ax.set_ylabel('E [MPa]')
+    ax.set_title(f'Line cut at y = {Ly/2:.1f} m')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.suptitle(f'H5: Two-Region E Field Inversion ({Nx}×{Ny} mesh, '
+                 f'L2 rel err = {l2_rel_error:.2%})', fontsize=13)
+    plt.tight_layout()
+    plot_path = os.path.join(OUT_DIR, 'h5_results.png')
+    plt.savefig(plot_path, dpi=150)
+    print(f"  Saved: {plot_path}")
+    plt.close()
+
+    # --- Step 7: Save results ---
+    t_total = time.time() - t0_total
+    results = {
+        'config': {
+            'Nx': Nx, 'Ny': Ny, 'num_cells': NUM_CELLS,
+            'Lx': Lx, 'Ly': Ly,
+            'traction': TRACTION,
+            'E_left': E_LEFT, 'E_right': E_RIGHT,
+            'E_init': E_INIT, 'k_fixed': K_FIXED,
+            'reg_weight': REG_WEIGHT,
+        },
+        'optimization': {
+            'method': 'L-BFGS-B',
+            'converged': bool(result.success),
+            'message': str(result.message),
+            'n_iterations': int(result.nit),
+            'n_function_evals': int(result.nfev),
+            'final_loss': float(result.fun),
+            'time_s': t_opt,
+        },
+        'errors': {
+            'l2_abs': l2_error,
+            'l2_rel': l2_rel_error,
+            'max_abs': max_error,
+            'max_rel': max_rel_error,
+            'mean_abs': mean_error,
+            'left_region_mean_rel': left_err,
+            'right_region_mean_rel': right_err,
+        },
+        'timing': {
+            'jit_warmup_s': t_warmup,
+            'optimization_s': t_opt,
+            'total_s': t_total,
+        },
+        'E_true': E_true.tolist(),
+        'E_recovered': E_final.tolist(),
     }
-    with open(os.path.join(exp_dir, f'metrics_{optimizer}.json'), 'w') as f:
-        json.dump(save_data, f, indent=2)
+    json_path = save_results(OUT_DIR, results)
+    print(f"  Saved: {json_path}")
 
-    print(f"\n  Results saved to {exp_dir}")
+    # Also save numpy arrays for post-processing
+    onp.save(os.path.join(OUT_DIR, 'E_true.npy'), E_true)
+    onp.save(os.path.join(OUT_DIR, 'E_recovered.npy'), E_final)
+
+    # --- Summary ---
+    print("\n" + "=" * 70)
+    print("H5 SUMMARY")
     print("=" * 70)
-
-    return result, metrics
+    print(f"  Mesh: {Nx}×{Ny} = {NUM_CELLS} elements")
+    print(f"  Converged: {result.success}")
+    print(f"  L2 relative error: {l2_rel_error:.4%}")
+    print(f"  Left region error:  {left_err:.4%}")
+    print(f"  Right region error: {right_err:.4%}")
+    print(f"  Total time: {t_total:.1f}s")
+    status = "PASS" if l2_rel_error < 0.10 else "NEEDS IMPROVEMENT"
+    print(f"  Status: {status}")
+    print("=" * 70)
 
 
 if __name__ == "__main__":
-    run_two_region_experiment(Nx=20, Ny=20, displacement=-0.1,
-                              optimizer='lbfgs', maxiter=100)
+    main()

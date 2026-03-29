@@ -36,14 +36,16 @@ class DruckerPragerPlasticity2D(Problem):
     def __init__(self, mesh, vec=2, dim=2, ele_type='QUAD4',
                  dirichlet_bc_info=None,
                  E=70.0e3, nu=0.3, alpha=0.3, k=250.0, a=None):
-        super().__init__(mesh, vec=vec, dim=dim, ele_type=ele_type,
-                         dirichlet_bc_info=dirichlet_bc_info)
+        # Set material params BEFORE super().__init__ because __post_init__
+        # calls custom_init() which needs self.E, self.k, etc.
         self.E = E
         self.nu = nu
         self.alpha = alpha
         self.k = k
         self.a = a if a is not None else 0.01 * k
         self._a_ratio = self.a / self.k
+        super().__init__(mesh, vec=vec, dim=dim, ele_type=ele_type,
+                         dirichlet_bc_info=dirichlet_bc_info)
 
     def custom_init(self):
         self.fe = self.fes[0]

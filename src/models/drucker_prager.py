@@ -41,13 +41,15 @@ class DruckerPragerPlasticity(Problem):
             k: Cohesion parameter
             a: Apex regularization parameter (default: 0.01*k)
         """
-        super().__init__(mesh, vec=vec, dim=dim, dirichlet_bc_info=dirichlet_bc_info)
+        # Set material params BEFORE super().__init__ because __post_init__
+        # calls custom_init() which needs self.E, self.k, etc.
         self.E = E
         self.nu = nu
         self.alpha = alpha
         self.k = k
         self.a = a if a is not None else 0.01 * k
         self._a_ratio = self.a / self.k
+        super().__init__(mesh, vec=vec, dim=dim, dirichlet_bc_info=dirichlet_bc_info)
 
     def custom_init(self):
         """Initialize internal variables for stress and strain history."""

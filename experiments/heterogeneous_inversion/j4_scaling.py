@@ -7,7 +7,7 @@ advantage of adjoint-based AD.
 
 Mesh sizes: 5×5 (25), 10×10 (100), 20×20 (400), 30×30 (900), 50×50 (2500, AD only)
 True E field: two-region (left=50000, right=90000)
-Displacement: -0.1, k fixed at 50.0
+Traction: -50.0 MPa on top, k fixed at 50.0
 """
 
 import jax
@@ -27,8 +27,12 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from common import (
-    InversionHeterogeneousDP2D, create_2d_mesh_and_bc,
-    generate_synthetic_observation, displacement_loss, RESULTS_DIR,
+    InversionHeterogeneousDP2D,
+    create_2d_mesh_traction_bc,
+    generate_synthetic_observation,
+    make_heterogeneous_loss,
+    log_to_E, E_to_log,
+    RESULTS_DIR,
 )
 from jax_fem.solver import ad_wrapper
 
@@ -45,32 +49,42 @@ def build_two_region_E_field(Nx, Ny):
     return np.array(E_field)
 
 
-def _build_problem_and_loss(Nx, Ny, displacement=-0.1, k_fixed=50.0):
-    """Build mesh, problem, fwd_pred, loss_fn, E_true, E_init for a given mesh size."""
+def _build_problem_and_loss(Nx, Ny, traction=-50.0, k_fixed=50.0):
+    """Build mesh, problem, fwd_pred, loss_fn, E_true, log_E_init for a given mesh size."""
     Lx, Ly = 10., 10.
-    mesh, bc_info = create_2d_mesh_and_bc(displacement, Lx=Lx, Ly=Ly, Nx=Nx, Ny=Ny)
+    solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
+
+    E_true = build_two_region_E_field(Nx, Ny)
+
+    obs_data = generate_synthetic_observation(
+        E_true, k_fixed,
+        traction=traction, Lx=Lx, Ly=Ly, Nx=Nx, Ny=Ny,
+        solver_options=solver_options,
+    )
+    u_obs = obs_data['u_obs']
+    obs_indices = obs_data['obs_indices']
+
+    mesh, bc_info, loc_fns, _ = create_2d_mesh_traction_bc(
+        traction, Lx, Ly, Nx, Ny)
+
     problem = InversionHeterogeneousDP2D(
         mesh, vec=2, dim=2, ele_type='QUAD4',
-        dirichlet_bc_info=bc_info, E_init=70000.0, k=k_fixed,
+        dirichlet_bc_info=bc_info,
+        location_fns=loc_fns,
+        E=70000.0, k=k_fixed,
+        traction_value=traction,
     )
-    solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
     fwd_pred = ad_wrapper(problem, solver_options=solver_options,
                           adjoint_solver_options=solver_options)
 
-    E_true = build_two_region_E_field(Nx, Ny)
-    obs_data, obs_indices, _ = generate_synthetic_observation(
-        problem, fwd_pred, E_true,
-    )
+    loss_fn = make_heterogeneous_loss(fwd_pred, u_obs, obs_indices)
 
-    E_init = np.full(Nx * Ny, 70000.0)
+    log_E_init = E_to_log(np.full(Nx * Ny, 70000.0))
 
-    def loss_fn(E_field):
-        return displacement_loss(E_field, problem, fwd_pred, obs_data, obs_indices)
-
-    return loss_fn, E_init
+    return loss_fn, log_E_init
 
 
-def time_ad_gradient(Nx, Ny, displacement=-0.1, k_fixed=50.0, n_repeats=3):
+def time_ad_gradient(Nx, Ny, traction=-50.0, k_fixed=50.0, n_repeats=3):
     """Time AD gradient computation for a given mesh size.
 
     Returns
@@ -78,18 +92,18 @@ def time_ad_gradient(Nx, Ny, displacement=-0.1, k_fixed=50.0, n_repeats=3):
     ad_time : float — median wall-clock time (seconds) for one gradient evaluation
     """
     print(f"  [AD] Building {Nx}×{Ny} problem...")
-    loss_fn, E_init = _build_problem_and_loss(Nx, Ny, displacement, k_fixed)
+    loss_fn, log_E_init = _build_problem_and_loss(Nx, Ny, traction, k_fixed)
     grad_fn = jax.grad(loss_fn)
 
     # JIT warmup
     print(f"  [AD] JIT warmup...")
-    _ = grad_fn(E_init)
+    _ = grad_fn(log_E_init)
 
     # Timed runs
     times = []
     for r in range(n_repeats):
         t0 = time.time()
-        g = grad_fn(E_init)
+        g = grad_fn(log_E_init)
         g.block_until_ready()
         elapsed = time.time() - t0
         times.append(elapsed)
@@ -100,11 +114,12 @@ def time_ad_gradient(Nx, Ny, displacement=-0.1, k_fixed=50.0, n_repeats=3):
     return ad_time
 
 
-def time_fd_gradient(Nx, Ny, n_params_sample=10, displacement=-0.1,
-                     k_fixed=50.0, eps=100.0):
+def time_fd_gradient(Nx, Ny, n_params_sample=10, traction=-50.0,
+                     k_fixed=50.0, eps=0.01):
     """Estimate FD gradient time by timing a subset of parameter perturbations.
 
-    Uses central differences: dL/dE_i ≈ (L(E+eps*e_i) - L(E-eps*e_i)) / (2*eps)
+    Uses central differences in log-E space:
+        dL/d(log_E_i) ≈ (L(log_E+eps*e_i) - L(log_E-eps*e_i)) / (2*eps)
 
     Returns
     -------
@@ -112,8 +127,8 @@ def time_fd_gradient(Nx, Ny, n_params_sample=10, displacement=-0.1,
     n_sampled : int — number of parameters actually sampled
     """
     print(f"  [FD] Building {Nx}×{Ny} problem...")
-    loss_fn, E_init = _build_problem_and_loss(Nx, Ny, displacement, k_fixed)
-    N = len(E_init)
+    loss_fn, log_E_init = _build_problem_and_loss(Nx, Ny, traction, k_fixed)
+    N = len(log_E_init)
 
     # Clamp sample size
     n_sampled = min(n_params_sample, N)
@@ -123,15 +138,15 @@ def time_fd_gradient(Nx, Ny, n_params_sample=10, displacement=-0.1,
 
     # Warmup: one forward eval
     print(f"  [FD] Warmup forward eval...")
-    _ = loss_fn(E_init)
+    _ = loss_fn(log_E_init)
 
     # Time FD for sampled parameters
     print(f"  [FD] Timing {n_sampled} central-difference evaluations...")
     t0 = time.time()
     for i in indices:
         e_i = np.zeros(N).at[i].set(1.0)
-        _ = loss_fn(E_init + eps * e_i)
-        _ = loss_fn(E_init - eps * e_i)
+        _ = loss_fn(log_E_init + eps * e_i)
+        _ = loss_fn(log_E_init - eps * e_i)
     fd_elapsed = time.time() - t0
 
     fd_time_per_param = fd_elapsed / n_sampled
@@ -146,7 +161,7 @@ def run_scaling_experiment():
     print("J4: Dimension Scaling Experiment — AD vs FD Gradient Time")
     print("=" * 70)
 
-    displacement = -0.1
+    traction = -50.0
     k_fixed = 50.0
 
     # Mesh configurations: (Nx, Ny, run_fd)
@@ -167,7 +182,7 @@ def run_scaling_experiment():
         print(f"{'─' * 60}")
 
         # AD timing
-        ad_time = time_ad_gradient(Nx, Ny, displacement, k_fixed)
+        ad_time = time_ad_gradient(Nx, Ny, traction, k_fixed)
 
         fd_time_est = None
         speedup = None
@@ -176,7 +191,7 @@ def run_scaling_experiment():
             n_sample = 10 if N <= 400 else 5
             fd_time_per_param, n_sampled = time_fd_gradient(
                 Nx, Ny, n_params_sample=n_sample,
-                displacement=displacement, k_fixed=k_fixed,
+                traction=traction, k_fixed=k_fixed,
             )
             # Full FD gradient requires 2*N forward evals (central diff),
             # but we already timed pairs, so: estimated total = fd_time_per_param * N

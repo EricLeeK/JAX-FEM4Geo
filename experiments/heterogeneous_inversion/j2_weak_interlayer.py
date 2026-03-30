@@ -10,9 +10,9 @@ Setup:
   - Interlayer: 45° band through domain center, width ≈ 1.5 units
   - Region defined by |cy - cx| < width/2
 - Fixed k=50
-- Top compression BC (displacement=-0.1), full-field observation + 1% noise
+- Top traction BC (traction=-50.0), full-field observation + 1% noise
 - TV regularization (λ=0.01, E_ref=70000)
-- L-BFGS-B optimizer, maxiter=100
+- L-BFGS-B optimizer in log-E space, maxiter=100
 
 Expected: recover the diagonal weak interlayer geometry.
 """
@@ -23,7 +23,7 @@ import numpy as onp
 import os
 import sys
 import time
-import json
+import scipy.optimize
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 jax_fem_path = os.path.join(project_root, 'jax-fem-main')
@@ -34,12 +34,12 @@ if project_root not in sys.path:
 
 from common import (
     InversionHeterogeneousDP2D,
-    create_2d_mesh_and_bc,
+    create_2d_mesh_traction_bc,
     generate_synthetic_observation,
-    displacement_loss,
-    optimize_lbfgsb,
-    plot_E_field_comparison,
-    compute_inversion_metrics,
+    make_heterogeneous_loss,
+    log_to_E, E_to_log,
+    plot_E_field,
+    save_results,
     RESULTS_DIR,
 )
 from jax_fem.solver import ad_wrapper
@@ -82,7 +82,7 @@ def build_interlayer_E_field(Nx, Ny, Lx, Ly, angle_deg=45, width=1.5,
 
 
 def run_interlayer_experiment(Nx=30, Ny=30, Lx=10.0, Ly=10.0,
-                              displacement=-0.1, k_fixed=50.0,
+                              traction=-50.0, k_fixed=50.0,
                               angle_deg=45, width=1.5,
                               E_bg=80000.0, E_weak=20000.0,
                               noise_level=0.01, reg_weight=0.01,
@@ -102,7 +102,7 @@ def run_interlayer_experiment(Nx=30, Ny=30, Lx=10.0, Ly=10.0,
     print(f"\nProblem setup:")
     print(f"  Mesh: {Nx}×{Ny} = {nc} QUAD4 elements")
     print(f"  Domain: {Lx}×{Ly}")
-    print(f"  Displacement: {displacement}")
+    print(f"  Traction: {traction}")
     print(f"  k (fixed): {k_fixed}")
     print(f"  E_bg={E_bg:.0f}, E_weak={E_weak:.0f}")
     print(f"  Interlayer: {angle_deg}° diagonal, width={width}")
@@ -110,80 +110,116 @@ def run_interlayer_experiment(Nx=30, Ny=30, Lx=10.0, Ly=10.0,
           f"({100 * n_interlayer / nc:.1f}%)")
     print(f"  Noise level: {noise_level * 100:.0f}%")
     print(f"  TV regularization: λ={reg_weight}, E_ref={E_ref}")
-    print(f"  Optimizer: L-BFGS-B, maxiter={maxiter}")
+    print(f"  Optimizer: L-BFGS-B (log-E space), maxiter={maxiter}")
 
-    # --- Create mesh and problem ---
-    mesh, bc_info = create_2d_mesh_and_bc(displacement, Lx=Lx, Ly=Ly,
-                                          Nx=Nx, Ny=Ny)
+    # --- Generate synthetic observation ---
+    print("\nGenerating synthetic observation...")
+    t0 = time.time()
+    obs = generate_synthetic_observation(
+        E_true, k_fixed, traction=traction,
+        Nx=Nx, Ny=Ny, noise_level=noise_level,
+    )
+    u_obs = obs['u_obs']
+    obs_indices = obs['obs_indices']
+    u_full = obs['u_full']
+    mesh = obs['mesh']
+    bc_info = obs['dirichlet_bc_info']
+    loc_fns = obs['location_fns']
+    print(f"  Forward solve: {time.time() - t0:.2f}s")
+    print(f"  Observation: {u_obs.shape[0]} nodes × {u_obs.shape[1]} components")
+    print(f"  Max displacement: {float(np.max(np.abs(u_full))):.6e}")
+
+    # --- Create inversion problem ---
     problem = InversionHeterogeneousDP2D(
         mesh, vec=2, dim=2, ele_type='QUAD4',
-        dirichlet_bc_info=bc_info, E_init=70000.0, k=k_fixed,
+        dirichlet_bc_info=bc_info,
+        location_fns=loc_fns,
+        E=E_ref, k=k_fixed,
+        traction_value=traction,
     )
 
     solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
     fwd_pred = ad_wrapper(problem, solver_options=solver_options,
                           adjoint_solver_options=solver_options)
 
-    # --- Generate synthetic observation with noise ---
-    print("\nGenerating synthetic observation...")
-    t0 = time.time()
-    key = jax.random.PRNGKey(42)
-    obs_data, obs_indices, sol_true = generate_synthetic_observation(
-        problem, fwd_pred, E_true,
-        noise_level=noise_level, key=key,
-    )
-    print(f"  Forward solve: {time.time() - t0:.2f}s")
-    print(f"  Observation: {obs_data.shape[0]} nodes × {obs_data.shape[1]} components")
-    print(f"  Max displacement: {float(np.max(np.abs(sol_true))):.6e}")
-
-    # --- Build TV regularization ---
+    # --- Build TV regularization (in log-E space) ---
     neighbor_pairs = build_structured_neighbor_pairs(Nx, Ny)
     print(f"  Neighbor pairs: {len(neighbor_pairs)}")
     neighbor_pairs_jax = np.array(neighbor_pairs)
 
-    regularizer = lambda E: tv_regularizer(E, neighbor_pairs_jax, E_ref=E_ref)
+    regularizer = lambda log_E: tv_regularizer(
+        np.exp(log_E), neighbor_pairs_jax, E_ref=E_ref)
 
-    # --- Define loss ---
-    def loss_fn(E_field):
-        return displacement_loss(E_field, problem, fwd_pred, obs_data, obs_indices,
-                                 regularizer=regularizer, reg_weight=reg_weight)
+    # --- Define loss in log-E space ---
+    loss_fn = make_heterogeneous_loss(
+        fwd_pred, u_obs, obs_indices,
+        regularizer=regularizer, reg_weight=reg_weight,
+    )
 
     # --- Sanity checks ---
-    loss_at_true = float(loss_fn(E_true))
+    log_E_true = E_to_log(E_true)
+    loss_at_true = float(loss_fn(log_E_true))
     print(f"\n  Loss at true E: {loss_at_true:.6e}")
 
-    E_init = np.full(nc, 70000.0)
-    loss_at_init = float(loss_fn(E_init))
+    log_E_init = E_to_log(np.full(nc, E_ref))
+    loss_at_init = float(loss_fn(log_E_init))
     print(f"  Loss at init E: {loss_at_init:.6e}")
 
     # --- Gradient check ---
     print("\nGradient check...")
     t0 = time.time()
-    grad = jax.grad(loss_fn)(E_init)
+    grad = jax.grad(loss_fn)(log_E_init)
     print(f"  Grad computed in {time.time() - t0:.2f}s")
     print(f"  |grad|: {float(np.linalg.norm(grad)):.4e}")
     print(f"  grad range: [{float(np.min(grad)):.4e}, {float(np.max(grad)):.4e}]")
 
-    # --- Run inversion ---
+    # --- Run inversion via scipy L-BFGS-B ---
+    log_E_min = E_to_log(np.array(10000.0))
+    log_E_max = E_to_log(np.array(200000.0))
+    bounds = [(float(log_E_min), float(log_E_max))] * nc
+
+    loss_history = []
+
+    value_and_grad_fn = jax.value_and_grad(loss_fn)
+
+    def scipy_objective(x):
+        log_E = np.array(x)
+        val, g = value_and_grad_fn(log_E)
+        loss_history.append(float(val))
+        return float(val), onp.array(g, dtype=onp.float64)
+
     print(f"\nRunning L-BFGS-B optimization (maxiter={maxiter})...")
-    result = optimize_lbfgsb(loss_fn, E_init, E_min=10000.0, E_max=200000.0,
-                              maxiter=maxiter)
+    t0 = time.time()
+    result = scipy.optimize.minimize(
+        scipy_objective,
+        x0=onp.array(log_E_init, dtype=onp.float64),
+        method='L-BFGS-B',
+        jac=True,
+        bounds=bounds,
+        options={'maxiter': maxiter, 'ftol': 1e-20, 'gtol': 1e-12},
+    )
+    opt_time = time.time() - t0
 
-    E_final = result['E_final']
+    E_final = log_to_E(np.array(result.x))
 
-    # --- Metrics ---
-    metrics = compute_inversion_metrics(E_true, E_final)
+    # --- Metrics (computed inline) ---
+    E_true_np = onp.array(E_true)
+    E_final_np = onp.array(E_final)
+
+    L2_rel = float(onp.linalg.norm(E_final_np - E_true_np) / onp.linalg.norm(E_true_np))
+    rel_errors = onp.abs(E_final_np - E_true_np) / onp.abs(E_true_np)
+    mean_rel = float(onp.mean(rel_errors))
+    max_rel = float(onp.max(rel_errors))
+
     print(f"\nInversion results:")
-    print(f"  Final loss: {result['loss_history'][-1]:.6e}")
-    print(f"  L2 relative error: {metrics['L2_relative_error']:.4e}")
-    print(f"  Mean relative error: {metrics['mean_relative_error']:.4e}")
-    print(f"  Max relative error: {metrics['max_relative_error']:.4e}")
-    print(f"  Time: {result['time_s']:.1f}s")
-    print(f"  Iterations: {result['nit']}")
+    print(f"  Final loss: {loss_history[-1]:.6e}")
+    print(f"  L2 relative error: {L2_rel:.4e}")
+    print(f"  Mean relative error: {mean_rel:.4e}")
+    print(f"  Max relative error: {max_rel:.4e}")
+    print(f"  Time: {opt_time:.1f}s")
+    print(f"  Iterations: {result.nit}")
 
     # --- Interlayer identification metrics ---
-    E_final_np = onp.array(E_final)
-    E_true_np = onp.array(E_true)
     threshold = (E_bg + E_weak) / 2.0  # midpoint between weak and background
 
     detected_weak = E_final_np < threshold
@@ -216,17 +252,30 @@ def run_interlayer_experiment(Nx=30, Ny=30, Lx=10.0, Ly=10.0,
     exp_dir = os.path.join(RESULTS_DIR, 'j2_weak_interlayer')
     os.makedirs(exp_dir, exist_ok=True)
 
-    plot_E_field_comparison(
-        E_true, E_final, Nx, Ny, Lx, Ly,
-        title=f'J2: Weak Interlayer Inversion ({Nx}×{Ny}, TV λ={reg_weight})',
-        save_path=os.path.join(exp_dir, 'E_field.png'),
-    )
+    # Side-by-side E field plot
+    try:
+        import matplotlib.pyplot as plt
+        vmin = min(float(E_true.min()), float(E_final.min()))
+        vmax = max(float(E_true.max()), float(E_final.max()))
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        plot_E_field(E_true, Nx, Ny, ax=axes[0], title='True E field',
+                     vmin=vmin, vmax=vmax)
+        plot_E_field(E_final, Nx, Ny, ax=axes[1], title='Inverted E field',
+                     vmin=vmin, vmax=vmax)
+        fig.suptitle(f'J2: Weak Interlayer Inversion ({Nx}×{Ny}, TV λ={reg_weight})',
+                     fontsize=13)
+        plt.tight_layout()
+        plt.savefig(os.path.join(exp_dir, 'E_field.png'),
+                    dpi=150, bbox_inches='tight')
+        plt.close()
+    except ImportError:
+        pass
 
     # Convergence plot
     try:
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(8, 5))
-        ax.semilogy(result['loss_history'])
+        ax.semilogy(loss_history)
         ax.set_xlabel('Iteration')
         ax.set_ylabel('Loss')
         ax.set_title('J2: Convergence')
@@ -238,31 +287,35 @@ def run_interlayer_experiment(Nx=30, Ny=30, Lx=10.0, Ly=10.0,
     except ImportError:
         pass
 
-    # Save metrics to JSON
+    # Save metrics
+    metrics = {
+        'L2_relative_error': L2_rel,
+        'mean_relative_error': mean_rel,
+        'max_relative_error': max_rel,
+    }
     save_data = {
         'Nx': Nx, 'Ny': Ny, 'num_cells': nc,
         'Lx': Lx, 'Ly': Ly,
-        'displacement': displacement, 'k_fixed': k_fixed,
+        'traction': traction, 'k_fixed': k_fixed,
         'E_bg': E_bg, 'E_weak': E_weak,
         'angle_deg': angle_deg, 'width': width,
         'n_interlayer_cells': n_interlayer,
         'noise_level': noise_level,
         'reg_type': 'tv', 'reg_weight': reg_weight, 'E_ref': E_ref,
-        'optimizer': 'lbfgs', 'maxiter': maxiter,
+        'optimizer': 'lbfgs_log_E', 'maxiter': maxiter,
         'metrics': metrics,
         'detection_rate': detection_rate,
         'false_positive_rate': false_positive_rate,
-        'time_s': result['time_s'],
-        'nit': result['nit'],
-        'final_loss': result['loss_history'][-1],
+        'time_s': opt_time,
+        'nit': result.nit,
+        'final_loss': loss_history[-1],
         'loss_at_true': loss_at_true,
         'interlayer_mean': float(E_final_np[interlayer_mask].mean()),
         'interlayer_std': float(E_final_np[interlayer_mask].std()),
         'background_mean': float(E_final_np[bg_mask].mean()),
         'background_std': float(E_final_np[bg_mask].std()),
     }
-    with open(os.path.join(exp_dir, 'metrics.json'), 'w') as f:
-        json.dump(save_data, f, indent=2)
+    save_results(exp_dir, save_data)
 
     print(f"\n  Results saved to {exp_dir}")
     print("=" * 70)
@@ -273,7 +326,7 @@ def run_interlayer_experiment(Nx=30, Ny=30, Lx=10.0, Ly=10.0,
 if __name__ == "__main__":
     run_interlayer_experiment(
         Nx=30, Ny=30, Lx=10.0, Ly=10.0,
-        displacement=-0.1, k_fixed=50.0,
+        traction=-50.0, k_fixed=50.0,
         angle_deg=45, width=1.5,
         E_bg=80000.0, E_weak=20000.0,
         noise_level=0.01, reg_weight=0.01,

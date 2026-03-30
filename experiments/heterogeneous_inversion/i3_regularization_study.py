@@ -25,12 +25,14 @@ if project_root not in sys.path:
 
 from common import (
     InversionHeterogeneousDP2D,
-    create_2d_mesh_and_bc,
+    create_2d_mesh_traction_bc,
     generate_synthetic_observation,
-    displacement_loss,
-    optimize_lbfgsb,
-    plot_E_field_comparison,
-    compute_inversion_metrics,
+    make_heterogeneous_loss,
+    log_to_E, E_to_log,
+    two_region_E_field,
+    uniform_E_field,
+    plot_E_field,
+    save_results,
     RESULTS_DIR,
 )
 from jax_fem.solver import ad_wrapper
@@ -40,19 +42,10 @@ from src.regularization import (
     tv_regularizer,
     laplacian_regularizer,
 )
+import scipy.optimize
 
 
-def build_two_region_E_field(Nx, Ny):
-    nc = Nx * Ny
-    E_field = onp.full(nc, 90000.0)
-    for ix in range(Nx):
-        for iy in range(Ny):
-            if ix < Nx // 2:
-                E_field[ix * Ny + iy] = 50000.0
-    return np.array(E_field)
-
-
-def run_regularization_study(Nx=20, Ny=20, displacement=-0.1,
+def run_regularization_study(Nx=20, Ny=20, traction=-50.0,
                               noise_levels=None, lambda_values=None,
                               maxiter=100):
     """Run regularization comparison experiment."""
@@ -75,25 +68,21 @@ def run_regularization_study(Nx=20, Ny=20, displacement=-0.1,
     print(f"  Noise levels: {noise_levels}")
     print(f"  Lambda values: {lambda_values}")
 
-    # --- Build mesh, problem, E_true ---
-    E_true = build_two_region_E_field(Nx, Ny)
-    mesh, bc_info = create_2d_mesh_and_bc(displacement, Lx=Lx, Ly=Ly, Nx=Nx, Ny=Ny)
-    problem = InversionHeterogeneousDP2D(
-        mesh, vec=2, dim=2, ele_type='QUAD4',
-        dirichlet_bc_info=bc_info, E_init=70000.0, k=k_fixed,
-    )
-    solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
-    fwd_pred = ad_wrapper(problem, solver_options=solver_options,
-                          adjoint_solver_options=solver_options)
-
-    # --- Build regularization structures ---
+    # --- Build E_true and regularization structures ---
+    E_true = np.array(two_region_E_field(Nx, Ny, E_left=50000., E_right=90000.))
     neighbor_pairs = build_structured_neighbor_pairs(Nx, Ny)
     L_mat = np.array(build_laplacian_matrix(Nx, Ny))
-    E_ref = 70000.0  # Reference E scale for normalization
+    E_ref = 70000.0
     print(f"  Neighbor pairs: {len(neighbor_pairs)}")
     print(f"  E_ref: {E_ref}")
 
-    E_init = np.full(nc, 70000.0)
+    log_E_init = E_to_log(np.full(nc, 70000.0))
+    log_E_min = E_to_log(np.array(10000.0))
+    log_E_max = E_to_log(np.array(200000.0))
+    bounds = [(float(log_E_min), float(log_E_max))] * nc
+
+    solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
+
     all_results = []
 
     for noise_level in noise_levels:
@@ -102,11 +91,27 @@ def run_regularization_study(Nx=20, Ny=20, displacement=-0.1,
         print(f"{'─' * 60}")
 
         # Generate observation with noise
-        key = jax.random.PRNGKey(42) if noise_level > 0 else None
-        obs_data, obs_indices, sol_true = generate_synthetic_observation(
-            problem, fwd_pred, E_true,
-            noise_level=noise_level, key=key,
+        obs_data = generate_synthetic_observation(
+            E_true, k_fixed,
+            traction=traction, Lx=Lx, Ly=Ly, Nx=Nx, Ny=Ny,
+            noise_level=noise_level,
         )
+        u_obs = obs_data['u_obs']
+        obs_indices = obs_data['obs_indices']
+        mesh = obs_data['mesh']
+        bc_info = obs_data['dirichlet_bc_info']
+        loc_fns = obs_data['location_fns']
+
+        # Build inversion problem and AD wrapper
+        problem = InversionHeterogeneousDP2D(
+            mesh, vec=2, dim=2, ele_type='QUAD4',
+            dirichlet_bc_info=bc_info,
+            location_fns=loc_fns,
+            E=70000., k=k_fixed,
+            traction_value=traction,
+        )
+        fwd_pred = ad_wrapper(problem, solver_options=solver_options,
+                              adjoint_solver_options=solver_options)
 
         for reg_type in ['none', 'tv', 'laplacian']:
             for lam in lambda_values:
@@ -119,50 +124,79 @@ def run_regularization_study(Nx=20, Ny=20, displacement=-0.1,
                 label = f"noise={noise_level:.0%}_reg={reg_type}_lam={lam:.0e}"
                 print(f"\n  [{label}]")
 
+                # Build regularizer that operates on log_E but applies
+                # TV/Laplacian to physical E
                 if reg_type == 'tv':
-                    regularizer = lambda E: tv_regularizer(E, neighbor_pairs, E_ref=E_ref)
+                    regularizer = lambda log_E, _np=neighbor_pairs, _er=E_ref: \
+                        tv_regularizer(np.exp(log_E), _np, E_ref=_er)
                 elif reg_type == 'laplacian':
-                    regularizer = lambda E: laplacian_regularizer(E, L_mat, E_ref=E_ref)
+                    regularizer = lambda log_E, _lm=L_mat, _er=E_ref: \
+                        laplacian_regularizer(np.exp(log_E), _lm, E_ref=_er)
                 else:
                     regularizer = None
 
-                def loss_fn(E_field, _reg=regularizer, _lam=lam):
-                    return displacement_loss(
-                        E_field, problem, fwd_pred, obs_data, obs_indices,
-                        regularizer=_reg, reg_weight=_lam,
-                    )
+                loss_fn = make_heterogeneous_loss(
+                    fwd_pred, u_obs, obs_indices,
+                    regularizer=regularizer, reg_weight=lam,
+                )
 
                 try:
-                    result = optimize_lbfgsb(
-                        loss_fn, E_init, E_min=10000.0, E_max=200000.0,
-                        maxiter=maxiter, verbose=False,
-                    )
-                    metrics = compute_inversion_metrics(E_true, result['E_final'])
+                    loss_and_grad = jax.value_and_grad(loss_fn)
 
-                    print(f"    L2 err: {metrics['L2_relative_error']:.4e}, "
-                          f"mean err: {metrics['mean_relative_error']:.4e}, "
-                          f"loss: {result['loss_history'][-1]:.4e}, "
-                          f"time: {result['time_s']:.1f}s")
+                    def scipy_objective(x):
+                        v, g = loss_and_grad(np.array(x))
+                        return float(v), onp.array(g, dtype=onp.float64)
+
+                    t0 = time.time()
+                    result = scipy.optimize.minimize(
+                        scipy_objective, onp.array(log_E_init),
+                        method='L-BFGS-B', jac=True,
+                        bounds=bounds,
+                        options={'maxiter': maxiter, 'ftol': 1e-20, 'gtol': 1e-12},
+                    )
+                    elapsed = time.time() - t0
+
+                    E_final = onp.array(log_to_E(np.array(result.x)))
+
+                    # Compute metrics inline
+                    E_true_np = onp.array(E_true)
+                    l2_err = float(onp.linalg.norm(E_final - E_true_np) /
+                                   onp.linalg.norm(E_true_np))
+                    mean_err = float(onp.mean(onp.abs(E_final - E_true_np) / E_true_np))
+
+                    print(f"    L2 err: {l2_err:.4e}, "
+                          f"mean err: {mean_err:.4e}, "
+                          f"loss: {result.fun:.4e}, "
+                          f"time: {elapsed:.1f}s")
 
                     entry = {
                         'noise_level': noise_level,
                         'reg_type': reg_type,
                         'lambda': lam,
                         'label': label,
-                        **metrics,
-                        'final_loss': result['loss_history'][-1],
-                        'time_s': result['time_s'],
-                        'nit': result['nit'],
+                        'L2_relative_error': l2_err,
+                        'mean_relative_error': mean_err,
+                        'final_loss': float(result.fun),
+                        'time_s': elapsed,
+                        'nit': result.nit,
                     }
                     all_results.append(entry)
 
                     # Save E field plot for selected cases
                     if noise_level in [0.0, 0.03] and lam in [0.0, 1e-2, 1.0]:
-                        plot_E_field_comparison(
-                            E_true, result['E_final'], Nx, Ny, Lx, Ly,
-                            title=f'{label}',
-                            save_path=os.path.join(exp_dir, f'{label}.png'),
-                        )
+                        import matplotlib.pyplot as plt
+                        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+                        vmin = min(float(E_true.min()), float(E_final.min()))
+                        vmax = max(float(E_true.max()), float(E_final.max()))
+                        plot_E_field(E_true, Nx, Ny, ax=axes[0],
+                                     title='True', vmin=vmin, vmax=vmax)
+                        plot_E_field(E_final, Nx, Ny, ax=axes[1],
+                                     title=f'Inverted ({label})',
+                                     vmin=vmin, vmax=vmax)
+                        plt.tight_layout()
+                        plt.savefig(os.path.join(exp_dir, f'{label}.png'),
+                                    dpi=150, bbox_inches='tight')
+                        plt.close()
 
                 except Exception as e:
                     print(f"    FAILED: {e}")
@@ -175,8 +209,7 @@ def run_regularization_study(Nx=20, Ny=20, displacement=-0.1,
                     })
 
     # --- Save summary ---
-    with open(os.path.join(exp_dir, 'results.json'), 'w') as f:
-        json.dump(all_results, f, indent=2)
+    save_results(exp_dir, all_results)
 
     # --- Print summary table ---
     print(f"\n{'=' * 70}")
@@ -229,7 +262,7 @@ def run_regularization_study(Nx=20, Ny=20, displacement=-0.1,
 
 if __name__ == "__main__":
     run_regularization_study(
-        Nx=20, Ny=20, displacement=-0.1,
+        Nx=20, Ny=20, traction=-50.0,
         noise_levels=[0.0, 0.01, 0.03],
         lambda_values=[0.0, 1e-2, 1e-1, 1.0, 10.0, 100.0],
         maxiter=100,

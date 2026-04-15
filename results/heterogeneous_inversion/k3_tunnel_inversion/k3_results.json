@@ -1,0 +1,114 @@
+[
+  {
+    "name": "K3a_uniform_full",
+    "n_cells": 348,
+    "n_obs": 200,
+    "noise_level": 0.0,
+    "E_true_range": [
+      50000.0,
+      90000.0
+    ],
+    "l2_rel": 0.03980254459851646,
+    "mean_rel": 0.035311670999317354,
+    "time_s": 22.15580701828003,
+    "nit": 150,
+    "converged": false,
+    "final_loss": 2.1295369003834823e-12
+  },
+  {
+    "name": "K3b_uniform_sparse",
+    "n_cells": 348,
+    "n_obs": 29,
+    "noise_level": 0.0,
+    "E_true_range": [
+      50000.0,
+      90000.0
+    ],
+    "l2_rel": 0.1762502961859846,
+    "mean_rel": 0.14227753923051742,
+    "time_s": 9.233542203903198,
+    "nit": 70,
+    "converged": true,
+    "final_loss": 5.001143088548802e-16
+  },
+  {
+    "name": "K3c_soft_zone",
+    "n_cells": 348,
+    "n_obs": 200,
+    "noise_level": 0.0,
+    "E_true_range": [
+      30000.0,
+      80000.0
+    ],
+    "l2_rel": 0.13011757760717857,
+    "mean_rel": 0.11430527403466743,
+    "time_s": 19.878642082214355,
+    "nit": 150,
+    "converged": false,
+    "final_loss": 5.39947335780685e-12
+  },
+  {
+    "name": "K3d_graded",
+    "n_cells": 348,
+    "n_obs": 200,
+    "noise_level": 0.0,
+    "E_true_range": [
+      41226.763282663014,
+      90000.0
+    ],
+    "l2_rel": 0.13415474045396616,
+    "mean_rel": 0.13191360047339726,
+    "time_s": 20.526178121566772,
+    "nit": 150,
+    "converged": false,
+    "final_loss": 6.276796301297328e-13
+  },
+  {
+    "name": "K3e_noise_1%",
+    "n_cells": 348,
+    "n_obs": 200,
+    "noise_level": 0.01,
+    "E_true_range": [
+      50000.0,
+      90000.0
+    ],
+    "l2_rel": 0.9502101554995044,
+    "mean_rel": 0.7492437071965224,
+    "time_s": 20.254154920578003,
+    "nit": 150,
+    "converged": false,
+    "final_loss": 7.052597523673628e-08
+  },
+  {
+    "name": "K3e_noise_3%",
+    "n_cells": 348,
+    "n_obs": 200,
+    "noise_level": 0.03,
+    "E_true_range": [
+      50000.0,
+      90000.0
+    ],
+    "l2_rel": 1.2605146249907897,
+    "mean_rel": 0.9355850744483256,
+    "time_s": 19.29695177078247,
+    "nit": 150,
+    "converged": false,
+    "final_loss": 8.828382976310335e-07
+  },
+  {
+    "name": "K3e_noise_5%",
+    "n_cells": 348,
+    "n_obs": 200,
+    "noise_level": 0.05,
+    "E_true_range": [
+      50000.0,
+      90000.0
+    ],
+    "l2_rel": 1.6378664833419772,
+    "mean_rel": 1.1995361066614527,
+    "time_s": 19.420490980148315,
+    "nit": 150,
+    "converged": false,
+    "final_loss": 2.8763962271264557e-06
+  }
+]

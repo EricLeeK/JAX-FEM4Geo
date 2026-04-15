@@ -1,0 +1,28 @@
+{
+  "mesh": {
+    "n_nodes": 200,
+    "n_cells": 348,
+    "ele_type": "TRI3"
+  },
+  "domain": {
+    "Lx": 20.0,
+    "Ly": 20.0,
+    "cx": 10.0,
+    "cy": 10.0,
+    "R": 2.5
+  },
+  "gradient_check": {
+    "cosine_similarity": 0.9999999999744309,
+    "max_relative_error": 0.00032587238788225534,
+    "mean_relative_error": 2.7487819675557883e-05,
+    "n_samples": 20,
+    "pass": true
+  },
+  "inversion": {
+    "l2_rel": 0.0452173992450991,
+    "mean_rel": 0.038593265171211824,
+    "time_s": 7.8391029834747314,
+    "nit": 100,
+    "converged": false
+  }
+}

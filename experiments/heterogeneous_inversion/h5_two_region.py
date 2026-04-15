@@ -56,7 +56,7 @@ from jax_fem.solver import ad_wrapper
 Nx, Ny = 20, 20
 Lx, Ly = 10., 10.
 TRACTION = -50.0  # Compressive traction on top [MPa]
-K_FIXED = 50.0
+K_FIXED = 500.0
 E_LEFT, E_RIGHT = 50000., 90000.
 E_INIT = 70000.
 REG_WEIGHT = 0.0  # No regularization for first test (sharp interface)
@@ -170,7 +170,7 @@ def main():
         method='L-BFGS-B',
         jac=True,
         bounds=bounds,
-        options={'maxiter': 200, 'maxfun': 500, 'ftol': 1e-20, 'gtol': 1e-10},
+        options={'maxiter': 200, 'maxfun': 500, 'ftol': 1e-20, 'gtol': 1e-12},
     )
 
     t_opt = time.time() - t_opt_start

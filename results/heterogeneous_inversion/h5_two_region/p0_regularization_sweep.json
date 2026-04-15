@@ -1,0 +1,249 @@
+[
+  {
+    "reg_type": "none",
+    "lambda": 0.0,
+    "label": "reg=none_lam=0e+00",
+    "l2_rel": 0.16893880625504581,
+    "mean_rel": 0.1160443528007295,
+    "max_rel": 1.6265716746945114,
+    "l2_abs": 11810.871680616001,
+    "final_loss": 2.6540726974543187e-09,
+    "nit": 16,
+    "nfev": 124,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 110.4319999217987,
+    "E_range": [
+      38672.390153338565,
+      148731.68058009713
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.0001,
+    "label": "reg=smoothness_lam=1e-04",
+    "l2_rel": 0.15341536783489743,
+    "mean_rel": 0.13193880901121802,
+    "max_rel": 0.29931132494152846,
+    "l2_abs": 11738.899111752717,
+    "final_loss": 1.3663293100126723e-07,
+    "nit": 34,
+    "nfev": 160,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 165.1311800479889,
+    "E_range": [
+      43499.75727033606,
+      88773.39152699501
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.001,
+    "label": "reg=smoothness_lam=1e-03",
+    "l2_rel": 0.1976674920614132,
+    "mean_rel": 0.1756656066577259,
+    "max_rel": 0.32710526773245396,
+    "l2_abs": 16588.009489599415,
+    "final_loss": 7.589429679765479e-07,
+    "nit": 48,
+    "nfev": 108,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 95.26110696792603,
+    "E_range": [
+      48302.473077349954,
+      74822.54089299052
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.01,
+    "label": "reg=smoothness_lam=1e-02",
+    "l2_rel": 0.304879786483393,
+    "mean_rel": 0.29346446736842574,
+    "max_rel": 0.39778386382006514,
+    "l2_abs": 18928.012756275963,
+    "final_loss": 1.742730439019545e-06,
+    "nit": 15,
+    "nfev": 187,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 185.83882594108582,
+    "E_range": [
+      67237.9143859933,
+      72558.28000251268
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.1,
+    "label": "reg=smoothness_lam=1e-01",
+    "l2_rel": 0.2775775761405565,
+    "mean_rel": 0.27650578283422206,
+    "max_rel": 0.3024548617057064,
+    "l2_abs": 21119.26829942009,
+    "final_loss": 1.802931192498147e-06,
+    "nit": 113,
+    "nfev": 133,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 134.81962633132935,
+    "E_range": [
+      62439.990974306376,
+      63093.67811151902
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.0001,
+    "label": "reg=tv_lam=1e-04",
+    "l2_rel": 0.21645311258111818,
+    "mean_rel": 0.19969654388365982,
+    "max_rel": 0.3507409895991525,
+    "l2_abs": 13963.349299772146,
+    "final_loss": 1.451010575885433e-06,
+    "nit": 48,
+    "nfev": 227,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 234.48175621032715,
+    "E_range": [
+      52262.50159555139,
+      83851.82338899793
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.001,
+    "label": "reg=tv_lam=1e-03",
+    "l2_rel": 0.278628083446857,
+    "mean_rel": 0.2775565068916112,
+    "max_rel": 0.30280945544314986,
+    "l2_abs": 21198.673097679748,
+    "final_loss": 2.814912809652352e-06,
+    "nit": 218,
+    "nfev": 310,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 441.81022214889526,
+    "E_range": [
+      62569.10034018348,
+      62911.638205217605
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.01,
+    "label": "reg=tv_lam=1e-02",
+    "l2_rel": 0.280136373407126,
+    "mean_rel": 0.27925440780612343,
+    "max_rel": 0.3015478833193484,
+    "l2_abs": 21228.753903445162,
+    "final_loss": 1.1826260401458619e-05,
+    "nit": 143,
+    "nfev": 158,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 186.19746780395508,
+    "E_range": [
+      62843.621673387104,
+      62876.522823625164
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.1,
+    "label": "reg=tv_lam=1e-01",
+    "l2_rel": 0.28043990098697824,
+    "mean_rel": 0.2796344164466752,
+    "max_rel": 0.3008824272917038,
+    "l2_abs": 21215.259836005524,
+    "final_loss": 0.00010182736174296737,
+    "nit": 300,
+    "nfev": 312,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 335.9638741016388,
+    "E_range": [
+      62918.87910213748,
+      62922.161573229874
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.0001,
+    "label": "reg=laplacian_lam=1e-04",
+    "l2_rel": 0.1372550594936607,
+    "mean_rel": 0.11228011916316097,
+    "max_rel": 0.30849279921853334,
+    "l2_abs": 9967.311512620656,
+    "final_loss": 7.916756021240698e-09,
+    "nit": 139,
+    "nfev": 328,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 261.1196720600128,
+    "E_range": [
+      42132.37743825931,
+      93531.35962911263
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.001,
+    "label": "reg=laplacian_lam=1e-03",
+    "l2_rel": 0.1499052487701825,
+    "mean_rel": 0.12704170391811412,
+    "max_rel": 0.3419798351150018,
+    "l2_abs": 10623.962856639137,
+    "final_loss": 3.58804126103767e-08,
+    "nit": 300,
+    "nfev": 307,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 148.4964678287506,
+    "E_range": [
+      38841.30594390569,
+      87753.01868129356
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.01,
+    "label": "reg=laplacian_lam=1e-02",
+    "l2_rel": 0.16689954140219151,
+    "mean_rel": 0.14715450899581742,
+    "max_rel": 0.38440370646584865,
+    "l2_abs": 11796.759540438337,
+    "final_loss": 2.6601675552750234e-07,
+    "nit": 300,
+    "nfev": 348,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 210.1462070941925,
+    "E_range": [
+      38078.41718052194,
+      82973.23767404245
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.1,
+    "label": "reg=laplacian_lam=1e-01",
+    "l2_rel": 0.2679825415083072,
+    "mean_rel": 0.25614246312518607,
+    "max_rel": 0.3920079451793968,
+    "l2_abs": 16796.64678914342,
+    "final_loss": 1.4274732834974598e-06,
+    "nit": 127,
+    "nfev": 225,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 204.4000837802887,
+    "E_range": [
+      60320.23488756407,
+      78690.33840775184
+    ]
+  }
+]

@@ -1,0 +1,67 @@
+{
+  "Nx": 30,
+  "Ny": 30,
+  "num_cells": 900,
+  "traction": -50.0,
+  "k_fixed": 500.0,
+  "noise_level": 0.01,
+  "reg_type": "tv",
+  "lambda": 1e-05,
+  "E_ref": 70000.0,
+  "maxiter": 200,
+  "metrics": {
+    "L2_relative_error": 0.18152117627044484,
+    "mean_relative_error": 0.14264106080203368,
+    "max_relative_error": 0.2454405131625972
+  },
+  "layer_stats": [
+    {
+      "layer": 1,
+      "y_range": [
+        0.0,
+        2.5
+      ],
+      "E_true": 40000.0,
+      "mean_inverted": 44944.16322165795,
+      "std_inverted": 2239.8927516280605,
+      "relative_error": 0.12360408054144882
+    },
+    {
+      "layer": 2,
+      "y_range": [
+        2.5,
+        5.0
+      ],
+      "E_true": 70000.0,
+      "mean_inverted": 64722.720198219846,
+      "std_inverted": 4842.608317219561,
+      "relative_error": 0.07538971145400221
+    },
+    {
+      "layer": 3,
+      "y_range": [
+        5.0,
+        7.5
+      ],
+      "E_true": 90000.0,
+      "mean_inverted": 68311.72944810307,
+      "std_inverted": 78.88843063146918,
+      "relative_error": 0.24098078390996588
+    },
+    {
+      "layer": 4,
+      "y_range": [
+        7.5,
+        10.0
+      ],
+      "E_true": 60000.0,
+      "mean_inverted": 68430.15060951818,
+      "std_inverted": 32.55127053928009,
+      "relative_error": 0.14050251015863638
+    }
+  ],
+  "time_s": 15.100352048873901,
+  "nit": 200,
+  "final_loss": 9.211447328463533e-08,
+  "loss_at_true": 2.1242836412083147e-07
+}

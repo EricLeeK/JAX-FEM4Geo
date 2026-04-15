@@ -58,7 +58,7 @@ def run_regularization_study(Nx=20, Ny=20, traction=-50.0,
     os.makedirs(exp_dir, exist_ok=True)
 
     Lx, Ly = 10., 10.
-    k_fixed = 50.0
+    k_fixed = 500.0
     nc = Nx * Ny
 
     print("=" * 70)
@@ -265,5 +265,5 @@ if __name__ == "__main__":
         Nx=20, Ny=20, traction=-50.0,
         noise_levels=[0.0, 0.01, 0.03],
         lambda_values=[0.0, 1e-2, 1e-1, 1.0, 10.0, 100.0],
-        maxiter=100,
+        maxiter=250,
     )

@@ -1,0 +1,90 @@
+{
+  "description": "L3: AD vs FD vs PSO method comparison for heterogeneous E-field inversion",
+  "benchmark": "Two-region E field (E_left=50000, E_right=90000), traction=-50 MPa, k=500",
+  "ad": [
+    {
+      "N": 25,
+      "time": 6.066148996353149,
+      "l2_rel": 3.0074935075195053e-05,
+      "nfev": 104
+    },
+    {
+      "N": 64,
+      "time": 12.722433805465698,
+      "l2_rel": 0.0015367615589454672,
+      "nfev": 216
+    },
+    {
+      "N": 100,
+      "time": 12.708377838134766,
+      "l2_rel": 0.026189733898327378,
+      "nfev": 223
+    },
+    {
+      "N": 225,
+      "time": 12.988745927810669,
+      "l2_rel": 0.03270895995723331,
+      "nfev": 219
+    },
+    {
+      "N": 400,
+      "time": 12.670423984527588,
+      "l2_rel": 0.039526446791088916,
+      "nfev": 198
+    }
+  ],
+  "fd": [
+    {
+      "N": 25,
+      "time": 63.64792227745056,
+      "l2_rel": 0.001611534309388948,
+      "nfev": 5100
+    },
+    {
+      "N": 64,
+      "time": 173.67822194099426,
+      "l2_rel": 0.03706807129073228,
+      "nfev": 14061
+    },
+    {
+      "N": 100,
+      "time": 130.84088492393494,
+      "l2_rel": 0.055575078195572204,
+      "nfev": 10653
+    },
+    {
+      "N": 225,
+      "time": 195.84336590766907,
+      "l2_rel": 0.07793213606375111,
+      "nfev": 14883
+    }
+  ],
+  "pso": [
+    {
+      "N": 25,
+      "time": 71.67594003677368,
+      "l2_rel": 0.5032198972879453,
+      "nfev": 6000
+    },
+    {
+      "N": 64,
+      "time": 110.24184274673462,
+      "l2_rel": 0.698593878128646,
+      "nfev": 8000
+    },
+    {
+      "N": 100,
+      "time": 77.1714973449707,
+      "l2_rel": 0.7634573823530417,
+      "nfev": 5000
+    }
+  ],
+  "key_findings": [
+    "AD time nearly constant (~13s) across 25-400 parameters",
+    "FD time grows linearly with N (64s at N=25, 196s at N=225)",
+    "PSO fails completely at all tested dimensions (L2 > 50%)",
+    "AD speedup vs FD: 10-15x",
+    "AD speedup vs PSO: 5-12x (but PSO accuracy is useless)",
+    "AD gradient matches FD gradient with cosine similarity = 1.0"
+  ]
+}

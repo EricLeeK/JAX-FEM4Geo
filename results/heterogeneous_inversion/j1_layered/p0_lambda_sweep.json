@@ -1,0 +1,255 @@
+[
+  {
+    "reg_type": "none",
+    "lambda": 0.0,
+    "label": "reg=none_lam=0e+00",
+    "error": "PETSc linear solver failed to converge, err = nan"
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.0001,
+    "label": "reg=tv_lam=1e-04",
+    "l2_rel": 0.30542809840880064,
+    "mean_rel": 0.26201063606016767,
+    "max_rel": 0.44189887213945983,
+    "l2_abs": 19877.581622445843,
+    "final_loss": 2.118950033848047e-07,
+    "nit": 200,
+    "nfev": 205,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 248.20540499687195,
+    "E_range": [
+      57576.09260319085,
+      57885.42235499981
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.001,
+    "label": "reg=tv_lam=1e-03",
+    "l2_rel": 0.30673325832856935,
+    "mean_rel": 0.26340020480402615,
+    "max_rel": 0.44309599007913275,
+    "l2_abs": 19940.360153077934,
+    "final_loss": 1.112520403042342e-06,
+    "nit": 200,
+    "nfev": 209,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 251.69115900993347,
+    "E_range": [
+      57711.74989058019,
+      57742.683260878075
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.01,
+    "label": "reg=tv_lam=1e-02",
+    "l2_rel": 0.30440019670157215,
+    "mean_rel": 0.2661237202218603,
+    "max_rel": 0.4252507894055216,
+    "l2_abs": 20224.427297427737,
+    "final_loss": 1.0114817799010186e-05,
+    "nit": 200,
+    "nfev": 208,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 201.90806412696838,
+    "E_range": [
+      56989.322244566545,
+      57010.03157622086
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.05,
+    "label": "reg=tv_lam=5e-02",
+    "l2_rel": 0.3047013810068968,
+    "mean_rel": 0.2657519211653825,
+    "max_rel": 0.42755273025333573,
+    "l2_abs": 20183.59146801651,
+    "final_loss": 5.0113919223918364e-05,
+    "nit": 200,
+    "nfev": 205,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 216.3732442855835,
+    "E_range": [
+      57101.84280273031,
+      57102.13412511803
+    ]
+  },
+  {
+    "reg_type": "tv",
+    "lambda": 0.1,
+    "label": "reg=tv_lam=1e-01",
+    "l2_rel": 0.3048670422135735,
+    "mean_rel": 0.2655650710111116,
+    "max_rel": 0.4288686021289317,
+    "l2_abs": 20163.022358060825,
+    "final_loss": 0.00010011371267709999,
+    "nit": 200,
+    "nfev": 206,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 146.6787850856781,
+    "E_range": [
+      57154.038977965676,
+      57154.98374430179
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.0001,
+    "label": "reg=laplacian_lam=1e-04",
+    "l2_rel": 0.2711183439994516,
+    "mean_rel": 0.24312372440452523,
+    "max_rel": 0.7094095548662644,
+    "l2_abs": 17279.215379075067,
+    "final_loss": 6.181777380650582e-08,
+    "nit": 30,
+    "nfev": 246,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 173.63901901245117,
+    "E_range": [
+      47484.64020639355,
+      68378.15057632056
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.001,
+    "label": "reg=laplacian_lam=1e-03",
+    "l2_rel": 0.28328361902680743,
+    "mean_rel": 0.2525532836780472,
+    "max_rel": 0.7097957348382712,
+    "l2_abs": 17797.971837744917,
+    "final_loss": 1.1514627626325817e-07,
+    "nit": 14,
+    "nfev": 70,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 49.7764949798584,
+    "E_range": [
+      47888.67671644926,
+      68689.16445503493
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.01,
+    "label": "reg=laplacian_lam=1e-02",
+    "l2_rel": 0.26797225970832456,
+    "mean_rel": 0.24575932792166233,
+    "max_rel": 0.48824083338342733,
+    "l2_abs": 17680.05135914227,
+    "final_loss": 9.448157778646226e-08,
+    "nit": 109,
+    "nfev": 287,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 210.06365180015564,
+    "E_range": [
+      48741.19668693118,
+      67600.73549295844
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.05,
+    "label": "reg=laplacian_lam=5e-02",
+    "l2_rel": 0.3123840949025833,
+    "mean_rel": 0.2667006735306731,
+    "max_rel": 0.581906453172763,
+    "l2_abs": 17446.412713503552,
+    "final_loss": 2.1547401415583576e-07,
+    "nit": 119,
+    "nfev": 248,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 184.97344517707825,
+    "E_range": [
+      56987.93892987539,
+      68613.0900704872
+    ]
+  },
+  {
+    "reg_type": "laplacian",
+    "lambda": 0.1,
+    "label": "reg=laplacian_lam=1e-01",
+    "l2_rel": 0.39646709858785567,
+    "mean_rel": 0.2937372783413853,
+    "max_rel": 0.7282287073540367,
+    "l2_abs": 18842.76543576401,
+    "final_loss": 3.936466789027547e-07,
+    "nit": 124,
+    "nfev": 416,
+    "converged": false,
+    "message": "ABNORMAL: ",
+    "time_s": 349.0566952228546,
+    "E_range": [
+      68252.43024266041,
+      69820.91323085921
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.001,
+    "label": "reg=smoothness_lam=1e-03",
+    "l2_rel": 0.2858246629596673,
+    "mean_rel": 0.24025479082742957,
+    "max_rel": 0.4230883375205256,
+    "l2_abs": 18919.762843411263,
+    "final_loss": 1.0227252275642191e-07,
+    "nit": 96,
+    "nfev": 280,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 237.87217593193054,
+    "E_range": [
+      55504.39065428083,
+      60052.17059588032
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.01,
+    "label": "reg=smoothness_lam=1e-02",
+    "l2_rel": 0.30445651851214034,
+    "mean_rel": 0.26084563822872076,
+    "max_rel": 0.4414220512554561,
+    "l2_abs": 19822.639825751954,
+    "final_loss": 1.1142214809325212e-07,
+    "nit": 170,
+    "nfev": 284,
+    "converged": true,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "time_s": 246.91896390914917,
+    "E_range": [
+      57482.890585526744,
+      58007.4481011716
+    ]
+  },
+  {
+    "reg_type": "smoothness",
+    "lambda": 0.1,
+    "label": "reg=smoothness_lam=1e-01",
+    "l2_rel": 0.30678220771887466,
+    "mean_rel": 0.2631886315368826,
+    "max_rel": 0.44391218299118246,
+    "l2_abs": 19923.645433083813,
+    "final_loss": 1.1247323688396156e-07,
+    "nit": 200,
+    "nfev": 207,
+    "converged": false,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    "time_s": 175.41057324409485,
+    "E_range": [
+      57738.084505856685,
+      57786.3424645435
+    ]
+  }
+]

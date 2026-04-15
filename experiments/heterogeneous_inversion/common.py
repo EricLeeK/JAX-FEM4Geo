@@ -28,6 +28,7 @@ if project_root not in sys.path:
 from jax_fem.solver import solver, ad_wrapper
 from jax_fem.generate_mesh import rectangle_mesh, Mesh
 from src.models.drucker_prager_2d import DruckerPragerPlasticity2D
+from src.models.mohr_coulomb_2d import MohrCoulombPlasticity2D, _mc_return_map_3d
 
 RESULTS_DIR = os.path.join(project_root, 'results', 'heterogeneous_inversion')
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -90,6 +91,161 @@ class InversionHeterogeneousDP2D(DruckerPragerPlasticity2D):
         nc, nq = len(self.fe.cells), self.fe.num_quads
         E_quad = np.repeat(E_field[:, None, None], nq, axis=1)  # (nc, nq, 1)
         self.internal_vars[2] = E_quad
+
+
+class InversionHeterogeneousMC2D(MohrCoulombPlasticity2D):
+    """2D plane-strain MC with per-element c field for heterogeneous inversion.
+
+    Overrides set_params to accept c_field of shape (num_cells,).
+    phi is fixed at the value set during __init__.
+
+    Supports optional traction loading via get_surface_maps.
+    """
+
+    def __init__(self, mesh, vec=2, dim=2, ele_type='QUAD4',
+                 dirichlet_bc_info=None, location_fns=None,
+                 E=70.0e3, nu=0.3, c=50.0, phi_deg=30.0, psi_deg=None,
+                 transition_angle=25.0, a_apex=None,
+                 traction_value=None):
+        self.traction_value = traction_value
+        if traction_value is not None:
+            self._setup_traction(traction_value)
+        self.E = E
+        self.nu = nu
+        self.c = c
+        self.phi = np.radians(phi_deg)
+        self.psi = np.radians(psi_deg) if psi_deg is not None else self.phi
+        self.phi_deg = phi_deg
+        self.psi_deg = psi_deg if psi_deg is not None else phi_deg
+        self.transition_angle = np.radians(transition_angle)
+        self.a_apex = a_apex if a_apex is not None else 0.01 * c
+        self._a_apex_ratio = self.a_apex / max(c, 1e-10)
+        from jax_fem.problem import Problem
+        Problem.__init__(self, mesh, vec=vec, dim=dim, ele_type=ele_type,
+                         dirichlet_bc_info=dirichlet_bc_info,
+                         location_fns=location_fns)
+
+    def _setup_traction(self, traction_value):
+        traction = traction_value
+
+        def get_surface_maps(self_ignored=None):
+            def traction_fn(u, point):
+                return np.array([0., traction])
+            return [traction_fn]
+
+        self.get_surface_maps = get_surface_maps
+
+    def set_params(self, c_field):
+        """Set per-element cohesion field.
+
+        Parameters
+        ----------
+        c_field : jax array, shape (num_cells,)
+            Cohesion for each element.
+        """
+        nc, nq = len(self.fe.cells), self.fe.num_quads
+        c_quad = np.repeat(c_field[:, None, None], nq, axis=1)
+        self.internal_vars[2] = c_quad
+
+
+class InversionJointMC2D(MohrCoulombPlasticity2D):
+    """2D MC with per-element c AND phi fields for joint inversion.
+
+    set_params accepts a stacked array [c_field; phi_field] of shape
+    (2*num_cells,). phi_field is in radians. psi is computed as
+    phi * psi_ratio inside the return map.
+    """
+
+    def __init__(self, mesh, vec=2, dim=2, ele_type='QUAD4',
+                 dirichlet_bc_info=None, location_fns=None,
+                 E=70.0e3, nu=0.3, c=50.0, phi_deg=30.0, psi_deg=None,
+                 transition_angle=25.0, a_apex=None,
+                 traction_value=None):
+        self.traction_value = traction_value
+        if traction_value is not None:
+            self._setup_traction(traction_value)
+        self.E = E
+        self.nu = nu
+        self.c = c
+        self.phi = np.radians(phi_deg)
+        self.psi = np.radians(psi_deg) if psi_deg is not None else self.phi
+        self.phi_deg = phi_deg
+        self.psi_deg = psi_deg if psi_deg is not None else phi_deg
+        self.psi_ratio = self.psi / np.maximum(self.phi, 1e-10)
+        self.transition_angle = np.radians(transition_angle)
+        self.a_apex = a_apex if a_apex is not None else 0.01 * c
+        self._a_apex_ratio = self.a_apex / max(c, 1e-10)
+        from jax_fem.problem import Problem
+        Problem.__init__(self, mesh, vec=vec, dim=dim, ele_type=ele_type,
+                         dirichlet_bc_info=dirichlet_bc_info,
+                         location_fns=location_fns)
+
+    def _setup_traction(self, traction_value):
+        traction = traction_value
+
+        def get_surface_maps(self_ignored=None):
+            def traction_fn(u, point):
+                return np.array([0., traction])
+            return [traction_fn]
+
+        self.get_surface_maps = get_surface_maps
+
+    def set_params(self, params):
+        """Set per-element c and phi fields.
+
+        Parameters
+        ----------
+        params : jax array, shape (2*num_cells,)
+            First num_cells entries: cohesion c per element.
+            Last num_cells entries: friction angle phi (radians) per element.
+        """
+        nc, nq = len(self.fe.cells), self.fe.num_quads
+        c_field = params[:nc]
+        phi_field = params[nc:]
+        self.internal_vars[2] = np.repeat(c_field[:, None, None], nq, axis=1)
+        self.internal_vars[3] = np.repeat(phi_field[:, None, None], nq, axis=1)
+
+    def get_tensor_map(self):
+        nu = self.nu
+        E_val = self.E
+        psi_ratio = self.psi_ratio
+        transition_angle = self.transition_angle
+        a_apex_ratio = self._a_apex_ratio
+
+        def stress_return_map(u_grad_2d, sigma_old, epsilon_old, c_arr, phi_arr):
+            phi = phi_arr[0]
+            psi = phi * psi_ratio
+            sigma_3d = _mc_return_map_3d(
+                u_grad_2d, sigma_old, epsilon_old,
+                E_val, nu, c_arr[0], phi, psi,
+                transition_angle, a_apex_ratio,
+            )
+            return sigma_3d[:2, :2]
+
+        return stress_return_map
+
+    def get_maps(self):
+        nu = self.nu
+        E_val = self.E
+        psi_ratio = self.psi_ratio
+        transition_angle = self.transition_angle
+        a_apex_ratio = self._a_apex_ratio
+
+        def strain_2d_to_3d(u_grad_2d):
+            u_grad = np.zeros((3, 3))
+            u_grad = u_grad.at[:2, :2].set(u_grad_2d)
+            return 0.5 * (u_grad + u_grad.T)
+
+        def stress_return_map_3d(u_grad_2d, sigma_old, epsilon_old, c_arr, phi_arr):
+            phi = phi_arr[0]
+            psi = phi * psi_ratio
+            return _mc_return_map_3d(
+                u_grad_2d, sigma_old, epsilon_old,
+                E_val, nu, c_arr[0], phi, psi,
+                transition_angle, a_apex_ratio,
+            )
+
+        return strain_2d_to_3d, stress_return_map_3d
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +316,8 @@ def create_2d_mesh_traction_bc(traction, Lx=10., Ly=10., Nx=20, Ny=20):
     properties (softer regions deform more), enabling E-field inversion.
     
     BCs:
-    - Bottom (y=0): u_x = 0, u_y = 0  (fully fixed)
+    - Bottom (y=0): u_y = 0
+    - Corner (x=0, y=0): u_x = 0  (remove rigid body)
     - Top (y=Ly): applied traction (Neumann)
     
     Parameters
@@ -187,9 +344,13 @@ def create_2d_mesh_traction_bc(traction, Lx=10., Ly=10., Nx=20, Ny=20):
     def bottom(p):
         return np.isclose(p[1], 0., atol=1e-5)
 
+    def corner(p):
+        return np.logical_and(np.isclose(p[0], 0., atol=1e-5),
+                              np.isclose(p[1], 0., atol=1e-5))
+
     dirichlet_bc_info = [
-        [bottom, bottom],
-        [0, 1],
+        [bottom, corner],
+        [1, 0],
         [lambda p: 0., lambda p: 0.],
     ]
 
@@ -199,6 +360,70 @@ def create_2d_mesh_traction_bc(traction, Lx=10., Ly=10., Nx=20, Ny=20):
     location_fns = [top_surface]
 
     return mesh, dirichlet_bc_info, location_fns, traction
+
+
+def solve_mc_incremental(c_field, mesh, bc_info, loc_fns,
+                         traction, n_steps,
+                         E=70.0e3, nu=0.3, phi_deg=30.0, psi_deg=None,
+                         transition_angle=25.0, a_apex=None,
+                         solver_options=None):
+    """Solve MC traction problem with incremental loading.
+
+    Creates a fresh Problem at each load step (with scaled traction)
+    and carries forward stress/strain history. Returns the final
+    displacement field.
+
+    Parameters
+    ----------
+    c_field : jax array, shape (num_cells,)
+        Per-element cohesion.
+    n_steps : int
+        Number of load increments.
+
+    Returns
+    -------
+    sol : jax array, shape (num_nodes, 2)
+        Final displacement field.
+    """
+    if solver_options is None:
+        solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
+
+    nc = len(mesh.cells)
+    nq = 4  # QUAD4
+    sigma_old = np.zeros((nc, nq, 3, 3))
+    eps_old = np.zeros((nc, nq, 3, 3))
+    sol = None
+    prev_sol_list = None
+
+    for step in range(n_steps):
+        frac = (step + 1) / n_steps
+        t_step = traction * frac
+
+        prob = InversionHeterogeneousMC2D(
+            mesh, vec=2, dim=2, ele_type='QUAD4',
+            dirichlet_bc_info=bc_info,
+            location_fns=loc_fns,
+            E=E, nu=nu, c=50., phi_deg=phi_deg, psi_deg=psi_deg,
+            transition_angle=transition_angle, a_apex=a_apex,
+            traction_value=t_step,
+        )
+        prob.set_params(c_field)
+        prob.sigmas_old = sigma_old
+        prob.epsilons_old = eps_old
+        prob.internal_vars[0] = sigma_old
+        prob.internal_vars[1] = eps_old
+
+        opts = dict(solver_options)
+        if prev_sol_list is not None:
+            opts['initial_guess'] = prev_sol_list
+
+        sol = solver(prob, solver_options=opts)[0]
+        prev_sol_list = [sol]
+        prob.update_stress_strain(sol)
+        sigma_old = prob.sigmas_old
+        eps_old = prob.epsilons_old
+
+    return sol
 
 
 def get_cell_centroids(mesh):
@@ -270,6 +495,66 @@ def generate_synthetic_observation(E_true_field, k_fixed,
     truth_problem.set_params(np.array(E_true_field))
     sol_list = solver(truth_problem, solver_options=solver_options)
     u_full = sol_list[0]  # (num_nodes, 2)
+
+    if obs_node_indices is None:
+        obs_indices = onp.arange(u_full.shape[0])
+    else:
+        obs_indices = onp.array(obs_node_indices)
+
+    u_obs = u_full[obs_indices]
+
+    if noise_level > 0.0:
+        max_disp = float(np.max(np.abs(u_full)))
+        noise = noise_level * max_disp * jax.random.normal(
+            jax.random.PRNGKey(42), u_obs.shape)
+        u_obs = u_obs + noise
+
+    return {
+        'u_obs': u_obs,
+        'obs_indices': obs_indices,
+        'u_full': u_full,
+        'mesh': mesh,
+        'dirichlet_bc_info': bc_info,
+        'location_fns': loc_fns,
+    }
+
+
+def generate_synthetic_observation_mc(c_true_field, phi_deg=30.0,
+                                       traction=-50.0,
+                                       Lx=10., Ly=10., Nx=20, Ny=20,
+                                       obs_node_indices=None, noise_level=0.0,
+                                       solver_options=None,
+                                       E=70.0e3, nu=0.3, psi_deg=None):
+    """Generate synthetic displacement observation from a known c(x) field (MC).
+
+    Uses traction loading so that the displacement field depends on
+    spatial cohesion — weaker regions deform more.
+
+    Parameters
+    ----------
+    c_true_field : array, shape (num_cells,)
+        True per-element cohesion field.
+    phi_deg : float
+        Fixed friction angle [degrees].
+    traction : float
+        Applied y-traction on top face [MPa] (negative = compression).
+    """
+    if solver_options is None:
+        solver_options = {'petsc_solver': {'ksp_type': 'preonly', 'pc_type': 'lu'}}
+
+    mesh, bc_info, loc_fns, trac = create_2d_mesh_traction_bc(
+        traction, Lx, Ly, Nx, Ny)
+
+    truth_problem = InversionHeterogeneousMC2D(
+        mesh, vec=2, dim=2, ele_type='QUAD4',
+        dirichlet_bc_info=bc_info,
+        location_fns=loc_fns,
+        E=E, nu=nu, c=50., phi_deg=phi_deg, psi_deg=psi_deg,
+        traction_value=traction,
+    )
+    truth_problem.set_params(np.array(c_true_field))
+    sol_list = solver(truth_problem, solver_options=solver_options)
+    u_full = sol_list[0]
 
     if obs_node_indices is None:
         obs_indices = onp.arange(u_full.shape[0])
@@ -389,6 +674,20 @@ def uniform_E_field(Nx, Ny, E_val=70000.):
     return onp.full(Nx * Ny, E_val)
 
 
+def two_region_c_field(Nx, Ny, c_left=30., c_right=70.):
+    """Create a two-region cohesion field: left half = c_left, right half = c_right."""
+    c = onp.full(Nx * Ny, c_right)
+    for ix in range(Nx // 2):
+        for iy in range(Ny):
+            c[ix * Ny + iy] = c_left
+    return c
+
+
+def uniform_c_field(Nx, Ny, c_val=50.):
+    """Create a uniform cohesion field."""
+    return onp.full(Nx * Ny, c_val)
+
+
 def layered_E_field(Nx, Ny, E_values, layer_boundaries):
     """Create a horizontally layered E field.
     
@@ -432,6 +731,22 @@ def plot_E_field(E_field, Nx, Ny, ax=None, title='E field', vmin=None, vmax=None
     ax.set_ylabel('y element index')
     ax.set_title(title)
     plt.colorbar(im, ax=ax, label='E [MPa]')
+    return im
+
+
+def plot_c_field(c_field, Nx, Ny, ax=None, title='c field', vmin=None, vmax=None):
+    """Plot a cohesion field on a structured grid."""
+    import matplotlib.pyplot as plt
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    grid = onp.array(c_field).reshape(Nx, Ny).T
+    im = ax.imshow(grid, origin='lower', aspect='equal',
+                   vmin=vmin, vmax=vmax, cmap='RdYlBu_r')
+    ax.set_xlabel('x element index')
+    ax.set_ylabel('y element index')
+    ax.set_title(title)
+    plt.colorbar(im, ax=ax, label='c [MPa]')
     return im
 
 

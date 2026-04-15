@@ -1,0 +1,68 @@
+{
+  "T1": {
+    "label": "T1: Baseline (no noise, full obs)",
+    "l2_rel": 0.07094151532322288,
+    "mean_rel": 0.05052908947263138,
+    "nit": 200,
+    "nfev": 217,
+    "time_s": 21.75144600868225,
+    "status": "PASS",
+    "noise_level": 0.0,
+    "n_obs": 121
+  },
+  "T2": {
+    "label": "T2: 1% noise, no reg",
+    "l2_rel": 0.17369046484262268,
+    "mean_rel": 0.14352806672407112,
+    "nit": 200,
+    "nfev": 218,
+    "time_s": 21.93214225769043,
+    "status": "IMPROVED",
+    "noise_level": 0.01,
+    "n_obs": 121
+  },
+  "T3": {
+    "label": "T3: 1% noise + reg",
+    "l2_rel": 0.16751004189012222,
+    "mean_rel": 0.10868235470398323,
+    "nit": 200,
+    "nfev": 221,
+    "time_s": 23.07415509223938,
+    "status": "IMPROVED",
+    "noise_level": 0.01,
+    "n_obs": 121
+  },
+  "T4": {
+    "label": "T4: 3% noise + reg",
+    "l2_rel": 0.16617988183842936,
+    "mean_rel": 0.12078101674552202,
+    "nit": 200,
+    "nfev": 219,
+    "time_s": 23.094093084335327,
+    "status": "IMPROVED",
+    "noise_level": 0.03,
+    "n_obs": 121
+  },
+  "T5": {
+    "label": "T5: Sparse obs + reg",
+    "l2_rel": 0.19404906870590283,
+    "mean_rel": 0.1493190896480661,
+    "nit": 200,
+    "nfev": 230,
+    "time_s": 24.392449140548706,
+    "status": "IMPROVED",
+    "noise_level": 0.0,
+    "n_obs": 40
+  },
+  "T6": {
+    "label": "T6: 3-region field",
+    "l2_rel": 0.062318742543768756,
+    "mean_rel": 0.048195743446849904,
+    "nit": 200,
+    "nfev": 228,
+    "time_s": 24.28955101966858,
+    "status": "PASS",
+    "noise_level": 0.0,
+    "n_obs": 121
+  }
+}

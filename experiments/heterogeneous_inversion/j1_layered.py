@@ -90,7 +90,7 @@ def run_layered_experiment(Nx=30, Ny=30, traction=-50.0,
     print("=" * 70)
 
     Lx, Ly = 10., 10.
-    k_fixed = 50.0
+    k_fixed = 500.0
     E_ref = 70000.0
 
     # --- Build true E field ---
@@ -306,4 +306,4 @@ def run_layered_experiment(Nx=30, Ny=30, traction=-50.0,
 
 if __name__ == "__main__":
     run_layered_experiment(Nx=30, Ny=30, traction=-50.0,
-                           noise_level=0.01, lam=1e-5, maxiter=100)
+                           noise_level=0.01, lam=1e-5, maxiter=200)

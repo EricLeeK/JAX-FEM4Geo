@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FEM-JAX-GEO 项目仪表板</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════ HERO ═══════════ -->
+<header class="hero">
+<div class="container">
+  <h1>FEM-JAX-GEO 项目仪表板</h1>
+  <p class="subtitle">基于可微有限元的岩土力学参数反演框架 — 研究进展交互式报告</p>
+  <div class="stats-row">
+    <div class="stat-card"><div class="num blue">16</div><div class="label">完成阶段</div></div>
+    <div class="stat-card"><div class="num cyan">30+</div><div class="label">实验脚本</div></div>
+    <div class="stat-card"><div class="num green">11/11</div><div class="label">测试通过</div></div>
+    <div class="stat-card"><div class="num orange">1099×</div><div class="label">最高加速比</div></div>
+    <div class="stat-card"><div class="num red">6</div><div class="label">关键 Bug 修复</div></div>
+    <div class="stat-card"><div class="num blue">2</div><div class="label">本构模型</div></div>
+  </div>
+</div>
+</header>
+
+<!-- ═══════════ NAV ═══════════ -->
+<nav>
+<div class="container">
+  <button class="active" onclick="showSection('overview')">总览</button>
+  <button onclick="showSection('ab')">A-B 本构模型</button>
+  <button onclick="showSection('diag')">梯度诊断</button>
+  <button onclick="showSection('d')">D 均质反演</button>
+  <button onclick="showSection('ef')">E-F 对比验证</button>
+  <button onclick="showSection('gh')">G-H 高维框架</button>
+  <button onclick="showSection('ij')">I-J 地质验证</button>
+  <button onclick="showSection('p0')">P0 精度突破</button>
+  <button onclick="showSection('k')">K 隧道应用</button>
+  <button onclick="showSection('l')">L 方法对比</button>
+  <button onclick="showSection('m2')">M2 Mohr-Coulomb</button>
+  <button onclick="showSection('roadmap')">路线图</button>
+</div>
+</nav>
+
+<main class="container">
+
+<!-- ══════════════════════════════════════════════════════
+     OVERVIEW
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-overview" class="section active">
+  <h2>项目总览</h2>
+  <p class="sec-desc">自动微分(AD)穿透非线性有限元求解器，实现岩土参数高效梯度反演</p>
+
+  <div class="card">
+    <h3>核心理念</h3>
+    <p style="color:var(--text2);margin-bottom:16px">传统参数反演依赖有限差分(FD)梯度或无梯度优化(PSO)，计算代价随参数维度线性增长。本项目利用 JAX 的自动微分能力，实现 <strong>O(1) 梯度计算</strong> — 无论反演 2 个参数还是 2000 个参数，梯度计算时间几乎不变。</p>
+    <div class="grid-3">
+      <div style="padding:20px;background:var(--bg);border-radius:4px">
+        <div style="color:var(--danger);font-weight:600;margin-bottom:8px">FD 梯度</div>
+        <div style="color:var(--text2);font-size:.9em">每个参数扰动一次<br>900参数 → 1800次前向求解<br>耗时 221 秒/梯度</div>
+      </div>
+      <div style="padding:20px;background:var(--bg);border-radius:4px">
+        <div style="color:var(--warning);font-weight:600;margin-bottom:8px">PSO 无梯度</div>
+        <div style="color:var(--text2);font-size:.9em">群体搜索，无方向信息<br>25+维度无法收敛<br>高维完全不可行</div>
+      </div>
+      <div style="padding:20px;background:var(--bg);border-radius:4px">
+        <div style="color:var(--success);font-weight:600;margin-bottom:8px">AD 梯度 (本项目)</div>
+        <div style="color:var(--text2);font-size:.9em">一次前向+一次反向<br>900参数 → 0.2 秒/梯度<br>加速 1099×</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>AD vs FD 加速比随维度变化</h3>
+      <div class="chart-box"><canvas id="chartOverviewScaling"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>各实验精度达标情况</h3>
+      <div class="chart-box"><canvas id="chartOverviewAccuracy"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>阶段完成度</h3>
+    <table>
+      <tr><th>阶段</th><th>内容</th><th>状态</th><th>关键成果</th></tr>
+      <tr><td>A-B</td><td>本构模型 + 验证体系</td><td class="val-good">完成</td><td>DP return mapping + internal_vars 修复，6 个 Bug</td></tr>
+      <tr><td>C</td><td>工程化收尾</td><td class="val-good">完成</td><td>脚本归并 4→2，pytest 4/4 PASS</td></tr>
+      <tr><td>D1-D3</td><td>均质参数反演</td><td class="val-good">完成</td><td>E/k 精度 10⁻¹³ / 10⁻¹⁵，两阶段策略</td></tr>
+      <tr><td>E1-E3</td><td>高级验证</td><td class="val-good">完成</td><td>噪声≤1%时误差&lt;1%，三轴 k 误差 2.4×10⁻⁶</td></tr>
+      <tr><td>F1-F5</td><td>AD vs FD 对比</td><td class="val-good">完成</td><td>V曲线 / 计时 / 完整反演 / 缩放性</td></tr>
+      <tr><td>G-H</td><td>高维反演框架</td><td class="val-good">完成</td><td>2D DP, traction BC, log-E, 400参数闭环</td></tr>
+      <tr><td>I3</td><td>正则化研究</td><td class="val-good">完成</td><td>TV/Laplacian × 3噪声 × 6权重</td></tr>
+      <tr><td>J1-J4</td><td>地质特征验证</td><td class="val-good">完成</td><td>层状/夹层/随机场/缩放性（1099× at N=900）</td></tr>
+      <tr><td>P0</td><td>精度调优</td><td class="val-good">完成</td><td>BC修复 + 弹性域 → H5: 16.9%→3.95%</td></tr>
+      <tr><td>K</td><td>隧道开挖应用</td><td class="val-good">完成</td><td>TRI3 非结构网格 348 单元，全场 L2=3.98%</td></tr>
+      <tr><td>L</td><td>方法系统对比</td><td class="val-good">完成</td><td>AD 10-15×加速，PSO 25+维失效</td></tr>
+      <tr><td>M2</td><td>Mohr-Coulomb</td><td class="val-good">完成</td><td>softplus C∞光滑化，c(x) 7.09%，c+φ 联合 PASS</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     A-B: CONSTITUTIVE MODEL
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-ab" class="section">
+  <h2>阶段 A-B：本构模型修复与验证</h2>
+  <p class="sec-desc">发现并修复 6 个关键 Bug，建立完整的测试验证体系</p>
+
+  <div class="card">
+    <h3>实验工况 <span class="badge badge-discovery">3D DP 模型</span></h3>
+    <div class="grid-3">
+      <div>
+        <div class="spec-grid">
+          <div>几何</div><div>2×2×4 mm 长方体</div>
+          <div>网格</div><div>2×2×4 HEX8 (16 单元)</div>
+          <div>节点数</div><div>45</div>
+          <div>积分点</div><div>64 (每单元 8 Gauss 点)</div>
+        </div>
+      </div>
+      <div>
+        <div class="spec-grid">
+          <div>E</div><div>70,000 MPa</div>
+          <div>ν</div><div>0.3</div>
+          <div>α (DP角)</div><div>0.3</div>
+          <div>k (屈服应力)</div><div>50 MPa</div>
+        </div>
+      </div>
+      <div>
+        <div class="spec-grid">
+          <div>加载</div><div>位移控制，顶面 -u_z</div>
+          <div>增量步</div><div>5 步 × -0.005mm/步</div>
+          <div>底面 BC</div><div>u_z=0 + 角点 u_x=u_y=0</div>
+          <div>求解器</div><div>Newton-Raphson + PETSc</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>发现的 6 个 Bug <span class="badge badge-bug">全部已修复</span></h3>
+  </div>
+
+  <div class="bug-card" onclick="toggleBug(this)">
+    <div class="bug-header">
+      <h4><span style="color:var(--danger)">Bug #1</span> Return Mapping 公式错误</h4>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="bug-body"><div class="bug-content">
+      <p><strong>现象：</strong>塑性修正量计算不正确，应力-应变曲线与解析解偏离</p>
+      <p><strong>根因：</strong>塑性乘子 Δλ 的分母写错</p>
+      <div class="diff">
+        <div class="diff-line diff-del">- delta_lambda = f_trial / (1 + 3 * alpha**2)  # 错误</div>
+        <div class="diff-line diff-add">+ delta_lambda = f_trial / (mu + 9 * K * alpha**2)  # 正确</div>
+      </div>
+      <p>1 + 3α² ≈ 1.27 vs μ + 9Kα² ≈ 26923 + 63462 ≈ 90385，差了 <strong>7 万倍</strong></p>
+      <div class="fix-tag">已修复 — 使用正确的弹性模量归一化</div>
+    </div></div>
+  </div>
+
+  <div class="bug-card" onclick="toggleBug(this)">
+    <div class="bug-header">
+      <h4><span style="color:var(--danger)">Bug #2</span> 边界条件缺少角点约束</h4>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="bug-body"><div class="bug-content">
+      <p><strong>现象：</strong>刚度矩阵奇异，求解器发散或给出异常位移</p>
+      <p><strong>根因：</strong>3D 问题仅约束了底面 z=0，没有约束 x/y 方向的刚体平动和旋转</p>
+      <div class="fix-tag">已修复 — 添加角点 x/y 约束消除刚体模式</div>
+    </div></div>
+  </div>
+
+  <div class="bug-card" onclick="toggleBug(this)">
+    <div class="bug-header">
+      <h4><span style="color:var(--danger)">Bug #3</span> 屈服强度 k 设置过高</h4>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="bug-body"><div class="bug-content">
+      <p><strong>现象：</strong>塑性梯度测试"通过"，但实际从未进入塑性</p>
+      <p><strong>根因：</strong>k=250 MPa 远高于试验应力水平 (~100 MPa)，所有积分点始终弹性</p>
+      <div class="diff">
+        <div class="diff-line diff-del">- k = 250.0  # 永远不屈服</div>
+        <div class="diff-line diff-add">+ k = 50.0   # 能真正进入塑性</div>
+      </div>
+      <div class="fix-tag">已修复 — k 从 250 降至 50</div>
+    </div></div>
+  </div>
+
+  <div class="bug-card" onclick="toggleBug(this)">
+    <div class="bug-header">
+      <h4><span style="color:var(--danger)">Bug #4</span> 测试无断言 (assert)</h4>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="bug-body"><div class="bug-content">
+      <p>pytest 显示 PASS，但测试函数内部只有 print，没有 assert。8 个测试文件全部添加 assert。</p>
+      <div class="fix-tag">已修复</div>
+    </div></div>
+  </div>
+
+  <div class="bug-card" onclick="toggleBug(this)">
+    <div class="bug-header">
+      <h4><span style="color:var(--danger)">Bug #5</span> 前向差分代替中心差分</h4>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="bug-body"><div class="bug-content">
+      <div class="diff">
+        <div class="diff-line diff-del">- grad_fd = (f(x+h) - f(x)) / h         # O(h) 一阶</div>
+        <div class="diff-line diff-add">+ grad_fd = (f(x+h) - f(x-h)) / (2*h)   # O(h²) 二阶</div>
+      </div>
+      <div class="fix-tag">已修复 — 改用中心差分</div>
+    </div></div>
+  </div>
+
+  <div class="bug-card" onclick="toggleBug(this)">
+    <div class="bug-header">
+      <h4><span style="color:var(--danger)">Bug #6</span> 本构驱动器与 FEM 不同步</h4>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="bug-body"><div class="bug-content">
+      <p>驱动器使用了旧版 return mapping 公式，没有跟随 Bug #1 修复同步更新。</p>
+      <div class="fix-tag">已修复 — 同步驱动器代码，验证精度至 1e-13 MPa</div>
+    </div></div>
+  </div>
+
+  <div class="card">
+    <h3>修复后验证结果</h3>
+    <table>
+      <tr><th>验证项</th><th>精度</th><th>说明</th></tr>
+      <tr><td>FEM vs 单点驱动器</td><td class="val-good">4.55×10⁻¹³ MPa</td><td>浮点精度级别的完美一致</td></tr>
+      <tr><td>弹性区间 AD vs FD</td><td class="val-good">&lt; 10⁻¹³</td><td>机器精度</td></tr>
+      <tr><td>塑性区间 AD vs FD</td><td class="val-bad">99.5% 误差</td><td>仍未解决 → 进入梯度诊断阶段</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     GRADIENT DIAGNOSIS
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-diag" class="section">
+  <h2>梯度诊断：定位最关键的 Bug</h2>
+  <p class="sec-desc">塑性区间 AD 梯度误差 99.5% — 设计 10 个诊断实验逐步排除，最终定位到 JIT 闭包陷阱</p>
+
+  <div class="card">
+    <h3>实验工况 <span class="badge badge-bug">3D DP 诊断</span></h3>
+    <div class="grid-2">
+      <div class="spec-grid">
+        <div>网格</div><div>2×2×4 HEX8, 16 单元, 64 积分点</div>
+        <div>材料</div><div>E=70000, ν=0.3, α=0.3, k=50</div>
+        <div>加载</div><div>位移控制 top -u_z, 5步×-0.005mm</div>
+        <div>BC</div><div>底面 u_z=0, 角点 u_x=u_y=0</div>
+      </div>
+      <div class="spec-grid">
+        <div>位移扫描范围</div><div>-0.020 到 -0.035 mm</div>
+        <div>弹塑性转变点</div><div>-0.026 mm (k/E 决定)</div>
+        <div>FD 步长</div><div>中心差分, h=1e-4 (相对)</div>
+        <div>损失函数</div><div>L = Σ(u_fem - u_obs)²</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>问题现象 <span class="badge badge-bug">严重</span></h3>
+    <table>
+      <tr><th>梯度分量</th><th>AD 值</th><th>FD 值（可信参考）</th><th>相对误差</th></tr>
+      <tr><td>∂L/∂E</td><td>-1.26×10⁻⁵</td><td>-2.78×10⁻³</td><td class="val-bad">99.5%</td></tr>
+      <tr><td>∂L/∂k</td><td style="color:var(--danger)">-3.58</td><td style="color:var(--success)">+0.287</td><td class="val-bad">108% (方向相反)</td></tr>
+    </table>
+    <p style="color:var(--text2);margin-top:12px">k 的梯度不仅大小错误，连正负号都反了。用这个梯度做反演，优化器会往完全相反的方向走。</p>
+  </div>
+
+  <div class="card">
+    <h3>诊断实验矩阵 <span style="color:var(--text2);font-size:.82em;font-weight:400">（点击查看排除结果）</span></h3>
+    <div class="diag-flow">
+      <div class="diag-step eliminated" onclick="showDiagDetail(1)"><div class="step-num">1</div><div class="step-label">FD 步长扫描</div></div>
+      <div class="diag-step eliminated" onclick="showDiagDetail(2)"><div class="step-num">2</div><div class="step-label">Active Set</div></div>
+      <div class="diag-step eliminated" onclick="showDiagDetail(3)"><div class="step-num">3</div><div class="step-label">单点 AD/FD</div></div>
+      <div class="diag-step eliminated" onclick="showDiagDetail(4)"><div class="step-num">4</div><div class="step-label">Taylor Test</div></div>
+      <div class="diag-step eliminated" onclick="showDiagDetail(5)"><div class="step-num">5</div><div class="step-label">光滑化扫描</div></div>
+      <div class="diag-step eliminated" onclick="showDiagDetail(6)"><div class="step-num">6</div><div class="step-label">位移扫描</div></div>
+      <div class="diag-step confirmed" onclick="showDiagDetail(7)"><div class="step-num">7–10</div><div class="step-label">VJP 分解</div></div>
+    </div>
+    <div id="diagDetail" class="detail-panel" style="display:none;margin-top:16px"></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Taylor Test：修复前 vs 修复后</h3>
+      <div class="control-row">
+        <div class="btn-group">
+          <button class="btn active" onclick="updateTaylor('before',this)">修复前</button>
+          <button class="btn" onclick="updateTaylor('after',this)">修复后</button>
+          <button class="btn" onclick="updateTaylor('both',this)">对比</button>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chartTaylor"></canvas></div>
+      <p style="color:var(--text2);font-size:.85em;margin-top:8px">Taylor test：AD 梯度正确时 r₁ 应以 O(ε²) 衰减（斜率=2）。修复前斜率=1，说明 AD 梯度完全错误。</p>
+    </div>
+    <div class="card">
+      <h3>位移扫描：误差在弹塑性边界突变</h3>
+      <div class="chart-box"><canvas id="chartDispSweep"></canvas></div>
+      <p style="color:var(--text2);font-size:.85em;margin-top:8px">从弹性到塑性，AD/FD 误差从 10⁻¹⁴ 突变至 99%，不是渐变而是跳变。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>根因：JIT 闭包捕获 + Tracer 交互</h3>
+    <div class="grid-2" style="margin-top:16px">
+      <div>
+        <h4 style="color:var(--danger);margin-bottom:12px">旧代码（有 Bug）</h4>
+        <pre>def set_params(self, params):
+    self.E_val = params[0]  # Python 属性
+    self.k_val = params[1]
+
+def get_tensor_map(self):
+    def stress_fn(u_grad, ...):
+        E = self.E_val  # 闭包捕获 ← 问题在这
+        k = self.k_val
+        # JIT 编译时 E,k 被当作常量烙入
+        # jax.vjp trace 时产生虚假梯度</pre>
+      </div>
+      <div>
+        <h4 style="color:var(--success);margin-bottom:12px">修复后代码</h4>
+        <pre>def custom_init(self):
+    self.internal_vars = [
+        ..., E_field, k_field  # 显式 JAX 数组
+    ]
+
+def get_tensor_map(self):
+    def stress_fn(u_grad, ..., E_arr, k_arr):
+        E = E_arr[0]  # 显式函数参数
+        k = k_arr[0]  # JAX 可以正确 trace</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>修复后全面验证：15 档位鲁棒性</h3>
+    <div class="chart-box"><canvas id="chartRobustness"></canvas></div>
+    <p style="color:var(--text2);font-size:.85em;margin-top:8px">15 个位移档位（-0.005mm 到 -0.031mm），涵盖纯弹性到深度塑性，全部通过 AD/FD 一致性检验。</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     D: HOMOGENEOUS INVERSION
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-d" class="section">
+  <h2>阶段 D：均质参数反演验证</h2>
+  <p class="sec-desc">梯度修复后，验证能否从观测数据正确反演出材料参数</p>
+
+  <div class="card">
+    <h3>D1 孪生实验工况 <span class="badge badge-result">机器精度</span></h3>
+    <div class="grid-3">
+      <div class="spec-grid">
+        <div>网格</div><div>2×2×4 HEX8, 16 单元</div>
+        <div>加载</div><div>增量 5 步 × -0.005mm/步</div>
+        <div>底面 BC</div><div>u_z=0, 角点 u_x=u_y=0</div>
+        <div>观测</div><div>全场节点位移 (45 节点)</div>
+      </div>
+      <div class="spec-grid">
+        <div>E (真值)</div><div>70,000 MPa</div>
+        <div>k (真值)</div><div>50 MPa</div>
+        <div>ν</div><div>0.3 (固定)</div>
+        <div>α</div><div>0.3 (固定)</div>
+      </div>
+      <div class="spec-grid">
+        <div>E (初始猜测)</div><div>55,000 MPa</div>
+        <div>k (初始猜测)</div><div>45 MPa</div>
+        <div>优化器</div><div>L-BFGS-B</div>
+        <div>策略</div><div>两阶段: 弹性定E → 塑性定k</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>D1 反演结果</h3>
+    <div class="grid-3">
+      <div style="padding:20px;background:var(--bg);border-radius:4px;text-align:center">
+        <div style="color:var(--text2);font-size:.85em">Stage 1: 弹性定 E</div>
+        <div style="font-family:var(--serif);font-size:1.8em;color:var(--success);margin:8px 0">70000.0</div>
+        <div style="color:var(--text2);font-size:.8em">误差 2.08×10⁻¹⁶</div>
+      </div>
+      <div style="padding:20px;background:var(--bg);border-radius:4px;text-align:center">
+        <div style="color:var(--text2);font-size:.85em">Stage 2: 塑性定 k</div>
+        <div style="font-family:var(--serif);font-size:1.8em;color:var(--success);margin:8px 0">50.0085</div>
+        <div style="color:var(--text2);font-size:.8em">误差 1.7×10⁻⁴</div>
+      </div>
+      <div style="padding:20px;background:var(--bg);border-radius:4px;text-align:center">
+        <div style="color:var(--text2);font-size:.85em">Joint 精修</div>
+        <div style="font-family:var(--serif);font-size:1.8em;color:var(--success);margin:8px 0">精确收敛</div>
+        <div style="color:var(--text2);font-size:.8em">E 误差 6.1×10⁻¹³ | k 误差 4.0×10⁻¹⁵</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>D2 损失面灵敏度分析</h3>
+      <p style="color:var(--text2);margin-bottom:12px">15×15 网格扫描 E∈[40k,100k], k∈[20,80] 参数空间</p>
+      <div id="heatmapD2" style="margin:16px 0"></div>
+      <table class="config-table">
+        <tr><td>局部凸性</td><td class="val-good">是</td></tr>
+        <tr><td>Hessian 条件数</td><td class="val-warn">3.2×10⁶</td></tr>
+        <tr><td>E 方向特征值</td><td>8.0×10⁻⁶（极不敏感）</td></tr>
+        <tr><td>k 方向特征值</td><td>25.7（高度敏感）</td></tr>
+      </table>
+      <p style="color:var(--text2);font-size:.85em;margin-top:8px">条件数 3.2M — E 和 k 灵敏度差 6 个量级，验证两阶段策略必要性。</p>
+    </div>
+    <div class="card">
+      <h3>D3 反演策略对比</h3>
+      <div class="chart-box"><canvas id="chartD3"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     E-F: AD vs FD COMPARISON
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-ef" class="section">
+  <h2>阶段 E-F：AD 与 FD 对比及噪声鲁棒性</h2>
+  <p class="sec-desc">系统性对比 AD 与 FD 梯度的精度、速度、缩放性；测试噪声鲁棒性</p>
+
+  <div class="card">
+    <h3>实验工况 <span class="badge badge-discovery">3D DP 均质</span></h3>
+    <div class="grid-2">
+      <div class="spec-grid">
+        <div>网格</div><div>2×2×4 HEX8, 16 单元</div>
+        <div>材料</div><div>E=70000, ν=0.3, α=0.3, k=50</div>
+        <div>加载</div><div>增量 5 步 × -0.005mm/步</div>
+        <div>反演参数</div><div>E, k (2参数均质)</div>
+      </div>
+      <div class="spec-grid">
+        <div>E1 噪声扫描</div><div>0%, 0.1%, 0.5%, 1%, 2%, 5%, 10%</div>
+        <div>E1 每级重复</div><div>5 次独立试验</div>
+        <div>F1 FD步长扫描</div><div>12 个步长 (0.1 到 1e-8)</div>
+        <div>F4 参数维度</div><div>1→4 (E → E,k,ν,α)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>E1 噪声鲁棒性 <span class="badge badge-result">交互式</span></h3>
+      <div class="control-row">
+        <label>噪声水平：</label>
+        <input type="range" id="noiseSlider" min="0" max="6" value="0" oninput="updateNoise()">
+        <span class="range-val" id="noiseVal">0%</span>
+      </div>
+      <div style="padding:16px;background:var(--bg);border-radius:4px;margin:12px 0">
+        <div class="grid-2" style="text-align:center">
+          <div><div style="color:var(--text2);font-size:.85em">E 平均误差</div><div id="noiseE" style="font-family:var(--mono);font-size:1.3em;color:var(--success)">2.08×10⁻¹⁶</div></div>
+          <div><div style="color:var(--text2);font-size:.85em">k 平均误差</div><div id="noiseK" style="font-family:var(--mono);font-size:1.3em;color:var(--success)">1.70×10⁻⁴</div></div>
+        </div>
+        <div style="text-align:center;margin-top:10px"><span id="noiseStatus" class="phase-pill pass">✓ 5/5 试验收敛</span></div>
+      </div>
+      <div class="chart-box"><canvas id="chartNoise"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>F1 梯度精度 V 曲线</h3>
+      <div class="chart-box"><canvas id="chartVcurve"></canvas></div>
+      <p style="color:var(--text2);font-size:.85em;margin-top:8px">FD 梯度精度受步长影响呈 V 形：步长太大有截断误差，太小有舍入误差。AD 不受步长影响。</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>F4 参数维度扩展性</h3>
+      <div class="chart-box"><canvas id="chartF4"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>F3 完整反演对比：AD vs FD</h3>
+      <table>
+        <tr><th></th><th>AD 梯度</th><th>FD 梯度</th><th>AD 优势</th></tr>
+        <tr><td>总时间</td><td class="val-good">1.48 s</td><td>3.74 s</td><td class="val-accent">2.5× 更快</td></tr>
+        <tr><td>迭代次数</td><td>18</td><td>24</td><td>25% 更少</td></tr>
+        <tr><td>E 误差</td><td>6.1×10⁻¹³</td><td>6.2×10⁻¹³</td><td>相当</td></tr>
+        <tr><td>k 误差</td><td class="val-good">3.8×10⁻¹⁵</td><td>7.7×10⁻⁶</td><td class="val-accent">高 9 个量级</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     G-H: HIGH-DIMENSIONAL FRAMEWORK
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-gh" class="section">
+  <h2>阶段 G-H：高维非均质反演框架</h2>
+  <p class="sec-desc">从反演 2 个标量参数扩展到逐单元 E 场（400–2500 个参数）</p>
+
+  <div class="card">
+    <h3>H5 双区域反演工况 <span class="badge badge-result">L2=3.95%</span></h3>
+    <div class="grid-3">
+      <div>
+        <div class="spec-grid">
+          <div>维度</div><div>2D 平面应变</div>
+          <div>域</div><div>10m × 10m 矩形</div>
+          <div>网格</div><div>20×20 QUAD4 (400 单元)</div>
+          <div>节点数</div><div>441</div>
+          <div>本构</div><div>Drucker-Prager 2D</div>
+        </div>
+      </div>
+      <div>
+        <div class="spec-grid">
+          <div>E 真值（左半）</div><div>50,000 MPa</div>
+          <div>E 真值（右半）</div><div>90,000 MPa</div>
+          <div>k (固定)</div><div>500 MPa (弹性域策略)</div>
+          <div>ν</div><div>0.3</div>
+          <div>α</div><div>0.3</div>
+        </div>
+      </div>
+      <div>
+        <div class="spec-grid">
+          <div>荷载</div><div>顶面 traction = -50 MPa</div>
+          <div>底面 BC</div><div>u_y=0 (滑动)</div>
+          <div>角点 BC</div><div>x=0,y=0 处 u_x=0</div>
+          <div>参数化</div><div>log(E) 空间</div>
+          <div>优化器</div><div>L-BFGS-B, gtol=1e-12</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>关键发现：位移 BC 下 E 不可辨识 <span class="badge badge-discovery">重要</span></h3>
+    <div class="grid-2" style="margin-top:16px">
+      <div style="padding:20px;background:var(--bg);border-radius:4px;border-left:3px solid var(--danger)">
+        <h4 style="color:var(--danger);margin-bottom:8px">位移 BC（Dirichlet）</h4>
+        <p style="color:var(--text2);font-size:.9em">应变 ε = u_y/L 是运动学常数，与 E 无关。Hessian 特征值：<strong style="color:var(--danger)">-5.46×10⁻⁶</strong>（鞍点）。E 梯度 ≈ 0，无法反演。</p>
+      </div>
+      <div style="padding:20px;background:var(--bg);border-radius:4px;border-left:3px solid var(--success)">
+        <h4 style="color:var(--success);margin-bottom:8px">荷载 BC（Neumann / Traction）</h4>
+        <p style="color:var(--text2);font-size:.9em">软区域变形大、硬区域变形小，位移场携带 E 信息。Hessian 特征值：<strong style="color:var(--success)">正定</strong>。可正确反演。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>反演框架架构</h3>
+    <p style="color:var(--text2);font-size:.9em;line-height:1.7">
+      <strong>参数化：</strong>log(E) 空间（保证 E &gt; 0）→
+      <strong>前向求解：</strong>FEM Newton-Raphson + PETSc LU 直接求解 →
+      <strong>损失：</strong>L = ‖u − u_obs‖² + λ·R(E) →
+      <strong>梯度：</strong>jax.grad 通过 ad_wrapper 隐式微分 →
+      <strong>优化：</strong>scipy L-BFGS-B
+    </p>
+    <div class="spec-grid" style="margin-top:12px">
+      <div>求解器选项</div><div>petsc_solver: {ksp_type: preonly, pc_type: lu}</div>
+      <div>L-BFGS-B bounds</div><div>log(10000) ≤ log(E) ≤ log(200000)</div>
+      <div>初始猜测</div><div>均匀 E = 70,000 MPa</div>
+      <div>收敛容差</div><div>gtol = 1e-12 (PGTOL)</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     I-J: REGULARIZATION & GEOLOGICAL
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-ij" class="section">
+  <h2>阶段 I-J：正则化研究与地质特征验证</h2>
+  <p class="sec-desc">系统性研究正则化参数选择，在层状岩体、软弱夹层、随机场等真实地质场景中验证</p>
+
+  <div class="card">
+    <h3>I3 正则化实验工况</h3>
+    <div class="grid-2">
+      <div class="spec-grid">
+        <div>网格</div><div>20×20 QUAD4, 400 单元 (同 H5)</div>
+        <div>E 场</div><div>双区域 E_left=50000, E_right=90000</div>
+        <div>k (固定)</div><div>500 MPa (弹性域)</div>
+        <div>荷载</div><div>traction = -50 MPa (顶面)</div>
+      </div>
+      <div class="spec-grid">
+        <div>正则化类型</div><div>TV (Total Variation) + Laplacian</div>
+        <div>权重扫描</div><div>λ = 0, 0.01, 0.1, 1.0 (各类型)</div>
+        <div>噪声水平</div><div>0%, 1%, 3%</div>
+        <div>maxiter</div><div>100 → 250 (P0-3 更新后)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>I3 正则化效果对比</h3>
+      <div class="control-row">
+        <label>噪声水平：</label>
+        <div class="btn-group">
+          <button class="btn active" onclick="updateRegChart(0,this)">0%</button>
+          <button class="btn" onclick="updateRegChart(1,this)">1%</button>
+          <button class="btn" onclick="updateRegChart(3,this)">3%</button>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chartReg"></canvas></div>
+      <p style="color:var(--text2);font-size:.85em;margin-top:8px">无噪声时不加正则化最优（0.96%）；有噪声时正则化必需（无正则化 57–103%）。Laplacian 优于 TV。</p>
+    </div>
+    <div class="card">
+      <h3>J4 AD vs FD 高维缩放性 <span class="badge badge-result">核心论文数据</span></h3>
+      <div class="chart-box"><canvas id="chartJ4"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>J1–J3 地质场景反演</h3>
+    <table>
+      <tr><th>实验</th><th>场景</th><th>网格/参数</th><th>正则化</th><th>噪声</th><th>L2 误差</th><th>状态</th></tr>
+      <tr>
+        <td>J1</td><td>四层岩体 E=[40k,70k,90k,60k]</td><td>30×30 / 900</td><td>TV λ=0.01</td><td>1%</td>
+        <td class="val-bad">18.15%</td><td><span class="phase-pill warn">需改进</span></td>
+      </tr>
+      <tr>
+        <td>J2</td><td>45° 弱夹层 E_bg=80k, E_wk=20k</td><td>30×30 / 900</td><td>TV λ=0.01</td><td>1%</td>
+        <td class="val-warn">23.9%</td><td>检测率 93.8%</td>
+      </tr>
+      <tr>
+        <td>J3</td><td>高斯随机场 μ=70k, σ=8.76k</td><td>30×30 / 900</td><td>Lap λ=0.1</td><td>1%</td>
+        <td class="val-good">2.7%</td><td>相关系数 0.978</td>
+      </tr>
+      <tr>
+        <td>J4</td><td>维度扩展性 (5×5 到 30×30)</td><td>25–900</td><td>—</td><td>—</td>
+        <td class="val-good">—</td><td>加速比 28–1099×</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>E 场反演可视化 <span style="color:var(--text2);font-size:.82em;font-weight:400">（交互式热力图）</span></h3>
+    <div class="control-row">
+      <label>场景：</label>
+      <div class="btn-group">
+        <button class="btn active" onclick="updateEfield('tworegion',this)">H5 双区域</button>
+        <button class="btn" onclick="updateEfield('layered',this)">J1 四层</button>
+        <button class="btn" onclick="updateEfield('random',this)">J3 随机场</button>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <h4 style="color:var(--text2);margin-bottom:8px;font-size:.9em">真实 E 场</h4>
+        <div id="heatmapTrue" style="max-width:380px"></div>
+      </div>
+      <div>
+        <h4 style="color:var(--text2);margin-bottom:8px;font-size:.9em">反演 E 场</h4>
+        <div id="heatmapInv" style="max-width:380px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     P0: PRECISION BREAKTHROUGH
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-p0" class="section">
+  <h2>阶段 P0：精度突破</h2>
+  <p class="sec-desc">H5 双区域 L2 误差从 16.9% 降至 3.95%，达成 &lt;5% 目标</p>
+
+  <div class="card">
+    <h3>两个独立问题的叠加</h3>
+    <div class="grid-2" style="margin-top:16px">
+      <div class="bug-card" onclick="toggleBug(this)">
+        <div class="bug-header">
+          <h4><span style="color:var(--danger)">问题 A</span> 底部 BC 过度约束</h4>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="bug-body"><div class="bug-content">
+          <p><strong>原 BC：</strong>整个底边同时约束 u_x=0 和 u_y=0</p>
+          <p><strong>后果：</strong>人为侧向约束 → 剪应力集中 → 触发 DP 屈服 → Newton 振荡（残差在 ~33 和 ~52 间跳动）</p>
+          <div class="diff">
+            <div class="diff-line diff-del">- location_fns = [bottom, bottom], vecs = [0, 1]</div>
+            <div class="diff-line diff-add">+ location_fns = [bottom, corner], vecs = [1, 0]</div>
+          </div>
+          <div class="fix-tag">仅约束底边 u_y=0 + 角点(0,0) u_x=0</div>
+        </div></div>
+      </div>
+      <div class="bug-card" onclick="toggleBug(this)">
+        <div class="bug-header">
+          <h4><span style="color:var(--danger)">问题 B</span> 优化中触发塑性</h4>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="bug-body"><div class="bug-content">
+          <p><strong>原 k=50：</strong>E 变化时部分单元进入塑性 → 非凸景观 → 梯度被污染</p>
+          <div class="diff">
+            <div class="diff-line diff-del">- k_fixed = 50.0   # 优化中可能屈服</div>
+            <div class="diff-line diff-add">+ k_fixed = 500.0  # 弹性域策略，Newton 1步收敛</div>
+          </div>
+          <div class="fix-tag">k=500 确保全程弹性（当前目标反演 E 场）</div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>修复前后对比</h3>
+    <div class="control-row">
+      <label>对比滑块：</label>
+      <input type="range" id="p0Slider" min="0" max="100" value="50" oninput="updateP0Compare()">
+      <span class="range-val" id="p0SliderVal">50%</span>
+    </div>
+    <div style="position:relative;height:48px;background:var(--bg);border-radius:4px;margin:16px 0;overflow:hidden;border:1px solid var(--border-light)">
+      <div id="p0BarBefore" style="position:absolute;left:0;top:0;bottom:0;background:rgba(181,68,68,0.1);border-right:2px solid var(--danger);width:50%;display:flex;align-items:center;justify-content:center">
+        <span style="color:var(--danger);font-weight:600;font-size:1.1em">修复前 16.9%</span>
+      </div>
+      <div style="position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;padding:0 20px">
+        <span style="color:var(--success);font-weight:600;font-size:1.1em">修复后 3.95%</span>
+      </div>
+    </div>
+    <table>
+      <tr><th>指标</th><th>修复前 (k=50, 旧BC)</th><th>修复后 (k=500, 新BC)</th><th>改善</th></tr>
+      <tr><td>L2 相对误差</td><td class="val-bad">16.9%</td><td class="val-good">3.95%</td><td class="val-accent">4.3×</td></tr>
+      <tr><td>左区 (E=50000)</td><td>~14%</td><td class="val-good">2.33%</td><td class="val-accent">6×</td></tr>
+      <tr><td>右区 (E=90000)</td><td>~12%</td><td class="val-good">1.81%</td><td class="val-accent">6.6×</td></tr>
+      <tr><td>Newton 迭代</td><td class="val-bad">振荡/不收敛</td><td class="val-good">1 步</td><td>—</td></tr>
+      <tr><td>E 恢复范围</td><td>38k–149k（伪影）</td><td class="val-good">48k–93k</td><td>消除极端值</td></tr>
+      <tr><td>gtol 影响</td><td>—</td><td>1e-10→9.94% | 1e-12→3.95%</td><td>需紧容差</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     K: TUNNEL APPLICATION
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-k" class="section">
+  <h2>阶段 K：隧道开挖应用</h2>
+  <p class="sec-desc">验证 AD 反演框架在非结构化网格上的适用性，模拟隧道开挖场景</p>
+
+  <div class="card">
+    <h3>实验工况 <span class="badge badge-discovery">非结构网格验证</span></h3>
+    <div class="grid-3">
+      <div class="spec-grid">
+        <div>网格类型</div><div>非结构化 TRI3 三角形</div>
+        <div>单元数</div><div>348</div>
+        <div>节点数</div><div>~200</div>
+        <div>生成工具</div><div>gmsh (CCW 节点排序)</div>
+      </div>
+      <div class="spec-grid">
+        <div>域尺寸</div><div>~20m × 20m</div>
+        <div>隧道半径</div><div>~2m (圆形开挖)</div>
+        <div>本构</div><div>DP 2D 平面应变</div>
+        <div>k (固定)</div><div>500 MPa (弹性域)</div>
+      </div>
+      <div class="spec-grid">
+        <div>E 场</div><div>双区域 (上/下分区)</div>
+        <div>初始猜测</div><div>均匀 E=70000</div>
+        <div>观测点 (K3a)</div><div>全场节点 (~200)</div>
+        <div>观测点 (K3b)</div><div>29 稀疏 (洞周+地表)</div>
+      </div>
+    </div>
+    <p style="color:var(--text2);font-size:.85em;margin-top:12px">TRI3 需要 CCW 节点排序 + 移除 gmsh 生成的未使用节点（圆心）。首次验证 AD 反演在非结构化网格上的正确性。</p>
+  </div>
+
+  <div class="card">
+    <h3>K3 反演结果汇总</h3>
+    <table>
+      <tr><th>实验</th><th>观测方式</th><th>E 场</th><th>噪声</th><th>正则化</th><th>L2</th><th>状态</th></tr>
+      <tr><td>K3a</td><td>全场 ~200 节点</td><td>双区域</td><td>0%</td><td>无</td><td class="val-good">3.98%</td><td class="val-good">PASS</td></tr>
+      <tr><td>K3b</td><td>稀疏 29 节点</td><td>双区域</td><td>0%</td><td>无</td><td class="val-warn">17.63%</td><td>信息不足</td></tr>
+      <tr><td>K3c</td><td>全场</td><td>软弱夹层</td><td>0%</td><td>无</td><td class="val-warn">13.01%</td><td>—</td></tr>
+      <tr><td>K3d</td><td>全场</td><td>渐变 E 场</td><td>0%</td><td>无</td><td class="val-warn">13.42%</td><td>—</td></tr>
+      <tr><td>K3e</td><td>全场</td><td>双区域</td><td>1%</td><td>无</td><td class="val-bad">95%</td><td>需正则化</td></tr>
+      <tr><td>K3e</td><td>全场</td><td>双区域</td><td>3%</td><td>无</td><td class="val-bad">126%</td><td>需正则化</td></tr>
+    </table>
+    <p style="color:var(--text2);font-size:.85em;margin-top:12px">K3a 证明 AD 框架对非结构网格完全适用（AD vs FD cosine sim = 1.0）。K3e 噪声实验证实稀疏观测+噪声下需要正则化。</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     L: METHOD COMPARISON
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-l" class="section">
+  <h2>阶段 L：方法系统对比</h2>
+  <p class="sec-desc">AD 梯度 vs FD 梯度 vs PSO 无梯度优化的系统性对比</p>
+
+  <div class="card">
+    <h3>L1 实验工况 <span class="badge badge-discovery">AD vs FD</span></h3>
+    <div class="grid-2">
+      <div class="spec-grid">
+        <div>问题</div><div>2D DP E(x) 双区域反演</div>
+        <div>网格维度</div><div>5×5, 10×10, 20×20, 30×30</div>
+        <div>参数维度</div><div>25, 100, 400, 900</div>
+        <div>FD 方法</div><div>中心差分, h=1e-4 (相对)</div>
+      </div>
+      <div class="spec-grid">
+        <div>L2 PSO 维度</div><div>25 (5×5 网格)</div>
+        <div>PSO 种群</div><div>30 粒子</div>
+        <div>PSO 评估次数</div><div>6000 次前向求解</div>
+        <div>PSO 结果</div><div>L2 &gt; 50% (未收敛)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>AD vs FD 加速比</h3>
+      <div class="chart-box"><canvas id="chartLScaling"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>AD vs PSO 对比（25 维）</h3>
+      <table>
+        <tr><th></th><th>AD (L-BFGS-B)</th><th>PSO</th></tr>
+        <tr><td>L2 误差</td><td class="val-good">&lt;1%</td><td class="val-bad">&gt;50%</td></tr>
+        <tr><td>函数评估次数</td><td class="val-good">104</td><td class="val-bad">6000</td></tr>
+        <tr><td>收敛性</td><td class="val-good">稳定收敛</td><td class="val-bad">无法收敛</td></tr>
+        <tr><td>可扩展性</td><td class="val-good">900+ 维可行</td><td class="val-bad">25+ 维失效</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>综合对比</h3>
+    <table>
+      <tr><th>维度</th><th>AD 加速比</th><th>AD 梯度时间</th><th>FD 梯度时间</th><th>PSO 可行性</th></tr>
+      <tr><td>25</td><td class="val-accent">28×</td><td>0.175s</td><td>4.96s</td><td class="val-warn">L2&gt;50%</td></tr>
+      <tr><td>100</td><td class="val-accent">111×</td><td>0.179s</td><td>19.9s</td><td class="val-bad">不可行</td></tr>
+      <tr><td>400</td><td class="val-accent">445×</td><td>0.170s</td><td>75.7s</td><td class="val-bad">不可行</td></tr>
+      <tr><td>900</td><td class="val-accent">1099×</td><td>0.202s</td><td>221.5s</td><td class="val-bad">不可行</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     M2: MOHR-COULOMB
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-m2" class="section">
+  <h2>阶段 M2：Mohr-Coulomb 本构模型</h2>
+  <p class="sec-desc">从零实现 MC 可微反演，经历多轮失败→诊断→修复，最终 c(x) 和 φ(x) 均达标</p>
+
+  <!-- ===== MC 基线工况 ===== -->
+  <div class="card">
+    <h3>mc_two_region c(x) 反演工况 <span class="badge badge-result">最终配置 (v5)</span></h3>
+    <div class="grid-3">
+      <div>
+        <h4 style="color:var(--text2);font-size:.82em;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">几何与网格</h4>
+        <div class="spec-grid">
+          <div>维度</div><div>2D 平面应变</div>
+          <div>域</div><div>10m × 10m 矩形</div>
+          <div>网格</div><div>10×10 QUAD4 (100 单元)</div>
+          <div>节点数</div><div>121</div>
+          <div>本构</div><div>MC (Abbo & Sloan 光滑化)</div>
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--text2);font-size:.82em;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">材料参数</h4>
+        <div class="spec-grid">
+          <div>E</div><div>70,000 MPa (固定)</div>
+          <div>ν</div><div>0.3 (固定)</div>
+          <div>φ</div><div>30° (固定, c-only 时)</div>
+          <div>ψ</div><div>15° (非关联流动)</div>
+          <div>c 真值</div><div>左=30, 右=70 MPa</div>
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--text2);font-size:.82em;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;font-weight:600">反演配置</h4>
+        <div class="spec-grid">
+          <div>加载</div><div>top u_y = -0.05 (位移控制)</div>
+          <div>底面 BC</div><div>u_y=0, corner(0,0) u_x=0</div>
+          <div>参数化</div><div>log(c) 空间</div>
+          <div>初始猜测</div><div>均匀 c=50 MPa</div>
+          <div>优化器</div><div>L-BFGS-B, maxiter=200</div>
+        </div>
+      </div>
+    </div>
+    <div class="spec-grid" style="margin-top:12px;grid-template-columns:1fr 1fr 1fr 1fr">
+      <div>bounds</div><div>log(5) ≤ log(c) ≤ log(500)</div>
+      <div>求解器</div><div>PETSc LU (preonly + lu)</div>
+    </div>
+    <p style="color:var(--text2);font-size:.85em;margin-top:12px">MC 屈服应力 σ_y = 2c·cosφ/(1−sinφ)。c=30→σ_y=104 MPa, c=50→σ_y=173 MPa, c=70→σ_y=243 MPa。位移控制下 c 仅在塑性域有灵敏度。</p>
+  </div>
+
+  <!-- ===== 迭代历程 ===== -->
+  <div class="card">
+    <h3>c(x) 反演迭代历程：从 50% 到 7% <span class="badge badge-bug">v1–v5</span></h3>
+    <div class="chart-box" style="height:280px"><canvas id="chartMCHistory"></canvas></div>
+    <table style="margin-top:16px">
+      <tr><th>版本</th><th>方案</th><th>L2</th><th>位移</th><th>失败原因 / 关键改进</th></tr>
+      <tr><td>v1 (doc 20)</td><td>单步求解</td><td class="val-bad">19.31%</td><td>-0.03</td><td>单步回映精度不足，左区 c=30→16.5</td></tr>
+      <tr><td>v2 (doc 21)</td><td>增量 5 步</td><td class="val-warn">10.35%</td><td>-0.03</td><td>stop_gradient 断裂梯度链，右区 c=70→93</td></tr>
+      <tr><td>v3 (doc 21)</td><td>双阶段 (增量+单步)</td><td class="val-warn">9.97%</td><td>-0.03</td><td>Phase1 增量(左) + Phase2 单步(右)，刚好达标</td></tr>
+      <tr><td>v4 (doc 25)</td><td>单步 (未修复)</td><td class="val-bad">~50%</td><td>-0.03</td><td>散度保护误判弹塑性迭代 → 全弹性解 → 零梯度</td></tr>
+      <tr style="font-weight:600"><td>v5 (doc 25)</td><td>单步 (修复后)</td><td class="val-good">7.09%</td><td>-0.05</td><td>softplus C∞ + 散度阈值 10× + 位移增大</td></tr>
+    </table>
+  </div>
+
+  <!-- ===== Newton 散度保护 Bug ===== -->
+  <div class="card">
+    <h3>关键 Bug：Newton 散度保护过于激进 <span class="badge badge-bug">已修复</span></h3>
+    <div class="grid-2" style="margin-top:12px">
+      <div>
+        <h4 style="color:var(--danger);margin-bottom:8px">问题现象（v4）</h4>
+        <p style="color:var(--text2);font-size:.9em;margin-bottom:12px">前向求解器始终返回弹性解 → ∂u/∂c=0 → 优化器收到零梯度 → c 不更新 → L2≈50%</p>
+        <h4 style="color:var(--danger);margin-bottom:8px">根因</h4>
+        <p style="color:var(--text2);font-size:.9em">残差只要不下降就 diverge_count++，3 次回退。弹塑性过渡区残差自然波动 (0.099→0.105→0.098) 被误判。</p>
+        <div style="margin-top:8px;padding:8px;background:var(--danger-bg);border-radius:4px;font-size:.85em;font-family:var(--mono)">
+          Newton: 0.17→best → 0.10 → 0.105 (div+1) → 0.103 (div+2) → 0.101 (div+3, 回退!)
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--success);margin-bottom:8px">修复方案 (solver.py)</h4>
+        <div class="diff">
+          <div class="diff-ctx">// Newton 散度保护</div>
+          <div class="diff-del">- if res_val >= best_res_val: diverge++</div>
+          <div class="diff-del">- max_diverge = 3</div>
+          <div class="diff-add">+ if res_val > 10 * best_res_val: diverge++</div>
+          <div class="diff-add">+ max_diverge = 5</div>
+        </div>
+        <h4 style="color:var(--success);margin-bottom:8px;margin-top:16px">softplus 光滑化 (mohr_coulomb_2d.py)</h4>
+        <div class="diff">
+          <div class="diff-del">- f_yield_plus = np.where(f > 0, f, 0)    # C⁰</div>
+          <div class="diff-add">+ f_yield_plus = softplus(f, β=100)       # C∞</div>
+        </div>
+        <p style="color:var(--text2);font-size:.85em;margin-top:8px">修复后 Newton：516.6 → 1.07e-4 → 1.46e-12（3 步收敛）</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 最终结果 ===== -->
+  <div class="grid-2">
+    <div class="card">
+      <h3>c(x) 双区域反演 <span class="badge badge-result">PASS 7.09%</span></h3>
+      <table>
+        <tr><th>区域</th><th>真值</th><th>反演值</th><th>误差</th></tr>
+        <tr><td>左半 (弱区)</td><td>c = 30 MPa</td><td>27.5 MPa</td><td class="val-good">7.8%</td></tr>
+        <tr><td>右半 (强区)</td><td>c = 70 MPa</td><td>73.0 MPa</td><td class="val-good">2.3%</td></tr>
+      </table>
+      <div class="spec-grid" style="margin-top:12px">
+        <div>迭代次数</div><div>200 (L-BFGS-B)</div>
+        <div>函数评估</div><div>217 次</div>
+        <div>运行时间</div><div>25.7 秒</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>c(x)+φ(x) 联合反演 <span class="badge badge-result">PASS</span></h3>
+      <div class="chart-box" style="height:180px"><canvas id="chartMCJoint"></canvas></div>
+      <div class="spec-grid" style="margin-top:12px">
+        <div>加载</div><div>disp=-0.03 (测试-0.05→L2=21%，回退)</div>
+        <div>c 真值</div><div>左=30 / 右=70 MPa</div>
+        <div>φ 真值</div><div>左=25° / 右=35°</div>
+        <div>ψ 策略</div><div>ψ = φ/2 (非关联)</div>
+        <div>参数化</div><div>log(c) + log(tan(φ))</div>
+        <div>参数维度</div><div>200 (100 c + 100 φ)</div>
+      </div>
+      <table style="margin-top:12px">
+        <tr><th>参数</th><th>L2</th><th>左区 真值→反演</th><th>右区 真值→反演</th></tr>
+        <tr><td>c</td><td class="val-good">6.95%</td><td>30→29.9 (0.3%)</td><td>70→91.4 (9.4%)</td></tr>
+        <tr><td>φ</td><td class="val-good">6.21%</td><td>25°→25.0° (0.0%)</td><td>35°→36.7° (4.9%)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== 鲁棒性两轮 ===== -->
+  <div class="card">
+    <h3>鲁棒性测试：两轮迭代 <span class="badge badge-bug">第一轮失败 → 第二轮修复</span></h3>
+    <p style="color:var(--text2);margin-bottom:16px">共用工况：10×10 QUAD4，u_y=-0.05，φ=30°，ψ=15°，E=70000，L-BFGS-B maxiter=200。</p>
+
+    <h4 style="margin-bottom:10px;font-family:var(--serif)">第一轮结果（含失败）</h4>
+    <table style="font-size:.88em;margin-bottom:24px">
+      <tr><th>编号</th><th>工况</th><th>观测</th><th>正则化</th><th>L2</th><th>评级</th></tr>
+      <tr><td>T1</td><td>双区域 c=[30,70]</td><td>全场 121节点, 0%噪声</td><td>无</td><td class="val-good">7.09%</td><td><span class="phase-pill pass">PASS</span></td></tr>
+      <tr><td>T2</td><td>双区域 c=[30,70]</td><td>全场 121节点, 1%噪声</td><td>无</td><td class="val-warn">17.37%</td><td><span class="phase-pill warn">IMPROVED</span></td></tr>
+      <tr><td>T3</td><td>双区域 c=[30,70]</td><td>全场 121节点, 3%噪声</td><td>无</td><td class="val-bad">54.38%</td><td><span class="phase-pill fail">NEEDS WORK</span></td></tr>
+      <tr><td>T4</td><td>双区域 c=[30,70]</td><td>边界 40节点, 0%噪声</td><td>无</td><td class="val-warn">20.61%</td><td><span class="phase-pill warn">IMPROVED</span></td></tr>
+      <tr><td>T5</td><td>水平3层 c=[20,60,40]</td><td>全场 121节点, 0%噪声</td><td>无</td><td class="val-bad">76.56%</td><td><span class="phase-pill fail">NEEDS WORK</span></td></tr>
+      <tr><td>T6</td><td>双区域+1%噪声</td><td>全场 121节点</td><td>smooth λ=1e-5</td><td class="val-warn">16.75%</td><td><span class="phase-pill warn">IMPROVED</span></td></tr>
+    </table>
+
+    <h4 style="margin-bottom:10px;font-family:var(--serif)">失败排查</h4>
+    <div class="grid-2" style="margin-bottom:24px">
+      <div style="padding:16px;background:var(--bg);border-radius:4px;border-left:3px solid var(--danger)">
+        <h4 style="margin-bottom:6px;font-size:.92em">T3 失败：3% 噪声过拟合</h4>
+        <p style="color:var(--text2);font-size:.85em;margin-bottom:8px">c 范围 [11, 181]。对 smoothness 正则化 λ 做扫参：</p>
+        <table style="font-size:.82em">
+          <tr><th>λ</th><th>L2</th><th>c 范围</th></tr>
+          <tr><td>0 (原始)</td><td class="val-bad">54.38%</td><td>[11, 181]</td></tr>
+          <tr><td>1e-6</td><td>22.10%</td><td>[22, 105]</td></tr>
+          <tr><td style="font-weight:600">5e-6 (最优)</td><td class="val-warn" style="font-weight:600">16.62%</td><td style="font-weight:600">[26, 84]</td></tr>
+          <tr><td>1e-4</td><td class="val-bad">29.63%</td><td>[35, 66]</td></tr>
+          <tr><td>1e-3</td><td class="val-bad">44.20%</td><td>[44, 52] 过平滑</td></tr>
+        </table>
+      </div>
+      <div style="padding:16px;background:var(--bg);border-radius:4px;border-left:3px solid var(--danger)">
+        <h4 style="margin-bottom:6px;font-size:.92em">T5 失败：水平分层 Newton 发散</h4>
+        <p style="color:var(--text2);font-size:.85em;margin-bottom:8px">Newton 残差从第 1 步发散：</p>
+        <div style="font-size:.82em;font-family:var(--mono);padding:6px;background:var(--danger-bg);border-radius:3px;margin-bottom:8px">
+          0.17 → 292 → 554 → 1231 → 散度保护回退到零解
+        </div>
+        <p style="color:var(--text2);font-size:.85em"><strong>根因：</strong>水平分层(y方向)+竖向压缩→各层相同应变但屈服应力差异巨大 (c=20→σ_y=69, c=60→σ_y=208)→层间刚度跳变→切线矩阵病态。换 c=[30,50,70] 也得零解，确认结构性问题。</p>
+        <div style="font-size:.85em;margin-top:8px;padding:6px;background:var(--success-bg);border-radius:3px">
+          <strong>解决：</strong>垂直分区(x方向) c=[25,60,40] → L2=<strong>6.23%</strong>
+        </div>
+      </div>
+    </div>
+
+    <h4 style="margin-bottom:10px;font-family:var(--serif)">第二轮最终结果（全部达标）</h4>
+    <div class="chart-box"><canvas id="chartMCRobust"></canvas></div>
+    <table style="margin-top:16px">
+      <tr><th>编号</th><th>工况详情</th><th>观测配置</th><th>正则化</th><th>L2</th><th>评级</th><th>vs 第一轮</th></tr>
+      <tr><td>T1</td><td>双区域 c=[30,70], disp=-0.05</td><td>全场 121节点, 0%</td><td>无</td><td class="val-good">7.09%</td><td><span class="phase-pill pass">PASS</span></td><td>—</td></tr>
+      <tr><td>T2</td><td>双区域, disp=-0.05</td><td>全场, 1%噪声</td><td>无</td><td class="val-warn">17.37%</td><td><span class="phase-pill warn">IMPROVED</span></td><td>对照组</td></tr>
+      <tr><td>T3</td><td>双区域, disp=-0.05</td><td>全场, 1%噪声</td><td>smooth λ=1e-5</td><td class="val-warn">16.75%</td><td><span class="phase-pill warn">IMPROVED</span></td><td>T2 改善</td></tr>
+      <tr><td>T4</td><td>双区域, disp=-0.05</td><td>全场, 3%噪声</td><td>smooth λ=5e-6</td><td class="val-warn">16.62%</td><td><span class="phase-pill warn">IMPROVED</span></td><td style="color:var(--success)">54%→17%</td></tr>
+      <tr><td>T5</td><td>双区域, disp=-0.05</td><td>边界 40节点, 0%</td><td>smooth λ=5e-6</td><td class="val-warn">19.40%</td><td><span class="phase-pill warn">IMPROVED</span></td><td>21%→19%</td></tr>
+      <tr><td>T6</td><td>垂直3区域 c=[25,60,40]</td><td>全场 121节点, 0%</td><td>无</td><td class="val-good">6.23%</td><td><span class="phase-pill pass">PASS</span></td><td style="color:var(--success)">77%→6%</td></tr>
+    </table>
+  </div>
+
+  <!-- ===== Regularization sweep chart ===== -->
+  <div class="card">
+    <h3>T3 正则化权重扫参 <span class="badge badge-result">λ 最优 = 5e-6</span></h3>
+    <div class="chart-box"><canvas id="chartMCRegSweep"></canvas></div>
+    <p style="color:var(--text2);font-size:.85em;margin-top:8px">正则化权重 λ 差一个数量级 = 17% vs 44% 的区别。λ∈[3e-6, 1e-5] 区间效果稳健。</p>
+  </div>
+
+  <!-- ===== 教训 ===== -->
+  <div class="card">
+    <h3>关键教训与已知局限</h3>
+    <div class="grid-2" style="margin-top:12px">
+      <div style="padding:16px;background:var(--bg);border-radius:4px;border-left:3px solid var(--accent)">
+        <h4 style="margin-bottom:8px;font-size:.92em">技术发现</h4>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">softplus vs np.where：C∞ vs C⁰，直接影响 AD 梯度质量</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">散度保护阈值至关重要：小幅残差波动 ≠ 发散</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">正则化权重 λ 差一个量级 = 17% vs 44%</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">联合 c+φ 反演位移 -0.03 优于 -0.05（深度塑性耦合）</p>
+      </div>
+      <div style="padding:16px;background:var(--bg);border-radius:4px;border-left:3px solid var(--warning)">
+        <h4 style="margin-bottom:8px;font-size:.92em">已知局限</h4>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">c 仅在塑性域有灵敏度 → 弹性区域不可辨识</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">水平分层 + 竖向压缩 → Newton 发散（层间刚度跳变）</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">联合反演 c+φ 在深度塑性下非唯一</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">稀疏观测（40/121 节点）精度受限于信息量</p>
+        <p style="color:var(--text2);font-size:.88em;margin:6px 0">荷载控制 Newton 在大荷载塑性问题上发散（未解决）</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════
+     ROADMAP
+     ══════════════════════════════════════════════════════ -->
+<section id="sec-roadmap" class="section">
+  <h2>项目路线图</h2>
+  <p class="sec-desc">已完成工作与后续计划</p>
+
+  <div class="card">
+    <h3>进度总览</h3>
+    <div style="margin:16px 0">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>整体进度</span><span style="color:var(--accent);font-weight:600">85%</span></div>
+      <div class="progress-bar"><div class="progress-fill blue" style="width:85%"></div></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>已完成</h3>
+      <div class="timeline">
+        <div class="tl-item done"><div class="tl-date">3月25日</div><div class="tl-title">阶段 A-B: 本构模型修复</div><div class="tl-desc">6 个 Bug 修复，FEM vs 驱动器精度 10⁻¹³</div></div>
+        <div class="tl-item done"><div class="tl-date">3月25–27日</div><div class="tl-title">梯度诊断</div><div class="tl-desc">10 个诊断实验，定位 JIT 闭包 Bug</div></div>
+        <div class="tl-item done"><div class="tl-date">3月27日</div><div class="tl-title">阶段 C-D: 工程化 + 均质反演</div><div class="tl-desc">D1 孪生实验 E/k 精度 10⁻¹³/10⁻¹⁵</div></div>
+        <div class="tl-item done"><div class="tl-date">3月28日</div><div class="tl-title">阶段 E-F: AD/FD 对比 + 噪声</div><div class="tl-desc">V曲线、缩放性、噪声鲁棒性</div></div>
+        <div class="tl-item done"><div class="tl-date">3月28日</div><div class="tl-title">阶段 G-J: 高维框架 + 地质验证</div><div class="tl-desc">400-900 参数反演，1099× 加速比</div></div>
+        <div class="tl-item done"><div class="tl-date">3月29–31日</div><div class="tl-title">阶段 P0: BC 修复 + 精度突破</div><div class="tl-desc">H5: 16.9%→3.95%</div></div>
+        <div class="tl-item done"><div class="tl-date">4月2日</div><div class="tl-title">阶段 K: 隧道开挖应用</div><div class="tl-desc">TRI3 非结构网格，全场 L2=3.98%</div></div>
+        <div class="tl-item done"><div class="tl-date">4月2日</div><div class="tl-title">阶段 L: 方法系统对比</div><div class="tl-desc">AD 10-15× 加速，PSO 25+维失效</div></div>
+        <div class="tl-item done"><div class="tl-date">4月9–14日</div><div class="tl-title">M2: Mohr-Coulomb</div><div class="tl-desc">c(x) 7.09%, c+φ 联合反演, softplus 修复, 鲁棒性 T1–T6</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>待完成</h3>
+      <div class="timeline">
+        <div class="tl-item current"><div class="tl-date">当前</div><div class="tl-title">论文对比基线实验</div><div class="tl-desc">FD 梯度反演 + softplus ablation</div></div>
+        <div class="tl-item"><div class="tl-date">待定</div><div class="tl-title">P0-2: J1 分层精度改进</div><div class="tl-desc">18.15% → 目标 &lt;10%</div></div>
+        <div class="tl-item"><div class="tl-date">长期</div><div class="tl-title">M1/M3-M5 更多本构模型</div><div class="tl-desc">Cam-Clay, Hoek-Brown, Perzyna</div></div>
+        <div class="tl-item"><div class="tl-date">最终</div><div class="tl-title">P3: 论文撰写</div><div class="tl-desc">数据整理 → 论文表格/图表 → 投稿</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>待解决问题清单</h3>
+    <table>
+      <tr><th>编号</th><th>问题</th><th>当前状态</th><th>目标</th></tr>
+      <tr><td>P0-2</td><td>J1 分层反演精度 (Layer 3/4 塌缩到 ~68k)</td><td class="val-bad">L2=18.15%</td><td>&lt;10%</td></tr>
+      <tr><td>论文</td><td>MC 问题上 FD 梯度反演精度对比</td><td class="val-bad">未开始</td><td>完成实验</td></tr>
+      <tr><td>论文</td><td>softplus vs np.where 定量 ablation</td><td class="val-bad">未开始</td><td>ablation study</td></tr>
+      <tr><td>T4</td><td>多工况加载改善 J1 上层识别</td><td class="val-warn">待验证</td><td>—</td></tr>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  FEM-JAX-GEO Project Dashboard · 更新于 2026-04-15
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

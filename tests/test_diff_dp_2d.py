@@ -32,6 +32,12 @@ def _safe_divide(x, y):
     return np.where(np.abs(y) < tiny, 0., x / y_safe)
 
 
+def _softplus(x, sharpness=100.):
+    """Smooth approximation of max(x, 0) for AD-friendly yield check."""
+    sx = sharpness * x
+    return np.where(sx > 20., x, np.log1p(np.exp(np.clip(sx, -30., 20.))) / sharpness)
+
+
 def stress_return_dp_2d(u_grad_2d, sigma_old_3x3, epsilon_old_3x3, E, k):
     """Full 3D return map from 2×2 u_grad (plane strain). Returns 3×3 stress."""
     nu = 0.3
@@ -57,7 +63,7 @@ def stress_return_dp_2d(u_grad_2d, sigma_old_3x3, epsilon_old_3x3, E, k):
     sqrt_J2_reg = np.sqrt(J2 + a * a)
     f_yield = sqrt_J2_reg + alpha * I1 - k
 
-    f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
+    f_yield_plus = _softplus(f_yield)
     n_dev = _safe_divide(s_dev, sqrt_J2_reg)
     denom = mu + 9. * bulk_k * alpha * alpha
     delta_lambda = _safe_divide(f_yield_plus, denom)
@@ -65,9 +71,6 @@ def stress_return_dp_2d(u_grad_2d, sigma_old_3x3, epsilon_old_3x3, E, k):
         mu * n_dev + 3. * bulk_k * alpha * np.eye(3)
     )
 
-    sigma_apex = (k / (3. * alpha)) * np.eye(3)
-    at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
-    sigma_3d = np.where(at_apex, sigma_apex, sigma_3d)
     return sigma_3d
 
 
@@ -126,17 +129,13 @@ class DifferentiableDruckerPrager2D(Problem):
             sqrt_J2_reg = np.sqrt(J2 + a * a)
             f_yield = sqrt_J2_reg + alpha * I1 - k
 
-            f_yield_plus = np.where(f_yield > 0., f_yield, 0.)
+            f_yield_plus = _softplus(f_yield)
             n_dev = safe_divide(s_dev, sqrt_J2_reg)
             denom = mu + 9. * bulk_k * alpha * alpha
             delta_lambda = safe_divide(f_yield_plus, denom)
             sigma_3d = sigma_trial - delta_lambda * (
                 mu * n_dev + 3. * bulk_k * alpha * np.eye(3)
             )
-
-            sigma_apex = (k / (3. * alpha)) * np.eye(3)
-            at_apex = np.logical_and(f_yield > 0., I1 > k / alpha)
-            sigma_3d = np.where(at_apex, sigma_apex, sigma_3d)
 
             return sigma_3d[:2, :2]
 

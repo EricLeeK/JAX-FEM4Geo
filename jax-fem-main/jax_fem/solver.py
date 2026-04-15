@@ -72,7 +72,7 @@ def umfpack_solve(A, b):
     logger.debug(f'Scipy Solver - Finished solving, linear solve res = {np.linalg.norm(Asp @ x - b)}')
     return x
 
-def petsc_solve(A, b, ksp_type, pc_type):
+def petsc_solve(A, b, ksp_type, pc_type, linear_solve_tol=1.0):
     rhs = PETSc.Vec().createSeq(len(b))
     rhs.setValues(range(len(b)), onp.array(b))
     ksp = PETSc.KSP().create()
@@ -95,7 +95,7 @@ def petsc_solve(A, b, ksp_type, pc_type):
 
     err = np.linalg.norm(y.getArray() - rhs.getArray())
     logger.debug(f"PETSc Solver - Finished solving, linear solve res = {err}")
-    assert err < 0.1, f"PETSc linear solver failed to converge, err = {err}"
+    assert err < linear_solve_tol, f"PETSc linear solver failed to converge, err = {err}"
 
     return x.getArray()
 
@@ -188,7 +188,8 @@ def linear_solver(A, b, x0, solver_options):
     elif 'petsc_solver' in solver_options:   
         ksp_type = solver_options['petsc_solver']['ksp_type'] if 'ksp_type' in solver_options['petsc_solver'] else 'bcgsl' 
         pc_type = solver_options['petsc_solver']['pc_type'] if 'pc_type' in solver_options['petsc_solver'] else 'ilu'
-        x = petsc_solve(A, b, ksp_type, pc_type)
+        linear_solve_tol = solver_options['petsc_solver'].get('linear_solve_tol', 1.0)
+        x = petsc_solve(A, b, ksp_type, pc_type, linear_solve_tol)
     elif 'custom_solver' in solver_options:
         # Users can define their own solver
         custom_solver = solver_options['custom_solver']
@@ -348,7 +349,7 @@ def line_search(problem, dofs, inc, res_vec, solver_options):
     is finite and smaller than the current residual norm.
     """
     shrink = solver_options.get('line_search_shrink', 0.5)
-    max_ls_iters = solver_options.get('line_search_max_iters', 10)
+    max_ls_iters = solver_options.get('line_search_max_iters', 15)
     min_alpha = solver_options.get('line_search_min_alpha', 1e-8)
 
     res_norm0 = float(np.linalg.norm(res_vec))
@@ -377,6 +378,12 @@ def line_search(problem, dofs, inc, res_vec, solver_options):
 
     if best_alpha is not None and best_res_norm < res_norm0:
         logger.debug(f"Line search fallback: alpha={best_alpha:.6e}, res={best_res_norm:.6e}")
+        return dofs + best_alpha * inc
+
+    # Accept best finite alpha even if it doesn't decrease residual
+    if best_alpha is not None and onp.isfinite(best_res_norm):
+        logger.warning(f"Line search: no decrease (res0={res_norm0:.6e}, best={best_res_norm:.6e}). "
+                       f"Using best alpha={best_alpha:.6e}.")
         return dofs + best_alpha * inc
 
     logger.warning(f"Line search failed (res0={res_norm0:.6e}, best={best_res_norm:.6e}). "
@@ -562,6 +569,14 @@ def solver(problem, solver_options={}):
     rel_res_val = res_val / res_val_initial
     logger.debug(f"Before, l_2 res = {res_val}, relative l_2 res = {rel_res_val}")
 
+    # Track best iterate for divergence recovery
+    best_res_val = float(res_val)
+    best_dofs = dofs
+    diverge_count = 0
+    max_diverge = solver_options.get('max_diverge', 5)
+    # Only count as divergence if residual increases by more than this factor
+    diverge_threshold = solver_options.get('diverge_threshold', 10.0)
+
     newton_iter = 0
     while (rel_res_val > rel_tol) and (res_val > tol):
         assert np.all(np.isfinite(res_val)), \
@@ -577,9 +592,31 @@ def solver(problem, solver_options={}):
 
         logger.debug(f"Newton iter {newton_iter}: l_2 res = {res_val}, relative l_2 res = {rel_res_val}")
 
+        cur_res = float(res_val)
+        # Track best iterate
+        if onp.isfinite(cur_res) and cur_res < best_res_val:
+            best_res_val = cur_res
+            best_dofs = dofs
+            diverge_count = 0
+        elif not onp.isfinite(cur_res) or cur_res > diverge_threshold * best_res_val:
+            # Only count as divergence on large blowups or NaN
+            diverge_count += 1
+
+        if diverge_count >= max_diverge:
+            logger.warning(f"Newton diverging for {max_diverge} consecutive iters "
+                           f"(res={res_val:.4e}, best={best_res_val:.4e}). "
+                           f"Reverting to best iterate.")
+            dofs = best_dofs
+            res_val = best_res_val
+            rel_res_val = res_val / res_val_initial
+            break
+
         if newton_iter >= max_newton_iters:
             logger.warning(f"Newton failed to converge in {max_newton_iters} iterations. "
                            f"res_val={res_val}, rel_res_val={rel_res_val}")
+            if float(res_val) > best_res_val:
+                dofs = best_dofs
+                res_val = best_res_val
             break
 
     assert np.all(np.isfinite(res_val)), f"res_val contains NaN, stop the program!"

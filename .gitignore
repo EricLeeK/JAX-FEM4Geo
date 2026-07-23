@@ -16,3 +16,4 @@ venv/
 
 # Temporary / scratch result dirs
 results/_*/
+.zcode/

@@ -135,11 +135,18 @@ def jax_solve(A, b, x0, precond):
                                                atol=1e-10,
                                                maxiter=10000)
 
-    # Verify convergence
+    # Verify convergence. NOTE: the original code hard-asserted here, which
+    # crashes the whole program on a single diverged iteration. For
+    # optimization-grade use (parameter inversion), a diverged solve should
+    # surface as a NaN loss that the optimizer backtracks from, not a fatal
+    # error. We warn + return NaN instead. Re-enable the assert for strict
+    # single-forward-solve debugging if desired.
     err = np.linalg.norm(A @ x - b)
     logger.debug(f"JAX Solver - Finshed solving, res = {err}")
-    assert err < 0.1, f"JAX linear solver failed to converge with err = {err}"
-    x = np.where(err < 0.1, x, np.nan) # For assert purpose, somehow this also affects bicgstab.
+    if not bool(np.all(np.isfinite(err))) or float(err) > 0.1:
+        logger.warning(f"JAX linear solver did not converge (err = {err}); "
+                       f"returning NaN so the optimizer can backtrack.")
+    x = np.where(err < 0.1, x, np.nan)  # NaN where not converged
 
     return x
 

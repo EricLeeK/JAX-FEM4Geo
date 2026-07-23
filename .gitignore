@@ -7,3 +7,12 @@
 
 # VS Code
 .vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Temporary / scratch result dirs
+results/_*/

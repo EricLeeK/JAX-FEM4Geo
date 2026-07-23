@@ -5,11 +5,21 @@ import numpy as onp
 from jax.experimental.sparse import BCOO
 import scipy
 import time
-from petsc4py import PETSc
 from jax_fem import logger
 from jax import config
 config.update("jax_enable_x64", True)
 
+# PETSc is optional. It is only required when the 'petsc_solver' backend is
+# selected, so we defer the import to keep the module loadable on systems
+# (e.g. macOS) where petsc4py is not installed. The default scipy/UMFPACK and
+# JAX backends work without it.
+try:
+    from petsc4py import PETSc
+    PETSC_AVAILABLE = True
+except ImportError:
+    PETSc = None
+    PETSC_AVAILABLE = False
+    logger.info("petsc4py not installed. PETSc solver disabled; use 'umfpack_solver' or 'jax_solver' instead.")
 
 try:
     import pyamgx
@@ -17,6 +27,79 @@ try:
 except ImportError:
     PYAMGX_AVAILABLE = False
     logger.info("pyamgx not installed. AMGX solver disabled.")
+
+
+################################################################################
+# Sparse matrix container
+
+if PETSC_AVAILABLE:
+    # When petsc4py is present, keep the original behaviour: PETSc.Mat is used
+    # as the sparse matrix container shared by all linear solver backends.
+    SparseMat = PETSc.Mat
+
+    def new_sparse_mat(csr_shape, csr_triple):
+        """Build a PETSc.Mat from a CSR triple (indptr, indices, data) + shape."""
+        indptr, indices, data = csr_triple
+        return PETSc.Mat().createAIJ(
+            size=csr_shape,
+            csr=(indptr.astype(PETSc.IntType, copy=False),
+                 indices.astype(PETSc.IntType, copy=False),
+                 data))
+else:
+    class SparseMat:
+        """Minimal PETSc.Mat-compatible sparse matrix backed by scipy CSR.
+
+        Implements only the subset of the petsc4py ``Mat`` interface that
+        :func:`get_A` and the non-PETSc linear solvers rely on
+        (``getValuesCSR``, ``getSize``, ``zeroRows``, ``matMult``,
+        ``transpose``, ``mult``). Used when petsc4py is unavailable (e.g.
+        macOS without conda-forge PETSc).
+        """
+
+        def __init__(self, mat):
+            # Always keep a CSR matrix for fast getValuesCSR / matvec.
+            self.mat = mat.tocsr()
+
+        @classmethod
+        def from_csr(cls, csr_shape, csr_triple):
+            indptr, indices, data = csr_triple
+            mat = scipy.sparse.csr_matrix((data, indices, indptr), shape=csr_shape)
+            return cls(mat)
+
+        def getValuesCSR(self):
+            m = self.mat
+            return m.indptr, m.indices, m.data
+
+        def getSize(self):
+            return self.mat.shape
+
+        def zeroRows(self, row_inds):
+            # Apply Dirichlet BC rows: zero off-diagonals, set diagonal to 1.
+            m = self.mat.tolil(copy=True)
+            rows = onp.asarray(row_inds)
+            if rows.size > 0:
+                m[rows, :] = 0.
+                m[rows, rows] = 1.
+            self.mat = m.tocsr()
+
+        def matMult(self, other):
+            return SparseMat(self.mat @ other.mat)
+
+        def transpose(self):
+            # NOTE: scipy returns a new matrix; unlike PETSc this does not mutate
+            # self in place. Callers here use the returned object directly, so
+            # the semantics are safe.
+            return SparseMat(self.mat.T.tocsr())
+
+        def mult(self, x, y=None):
+            # scipy-style matvec; only reached on the PETSc path, provided for
+            # interface symmetry.
+            res = self.mat @ onp.asarray(x)
+            return res if y is None else res
+
+    def new_sparse_mat(csr_shape, csr_triple):
+        """Build a SparseMat from a CSR triple (indptr, indices, data) + shape."""
+        return SparseMat.from_csr(csr_shape, csr_triple)
 
 
 ################################################################################
@@ -36,8 +119,8 @@ def jax_solve(A, b, x0, precond):
     A = BCOO.from_scipy_sparse(A_sp_scipy).sort_indices()
     jacobi = np.array(A_sp_scipy.diagonal())
     pc = lambda x: x * (1. / jacobi) if precond else None
-    
-    if issubclass(PETSc.ScalarType, np.complexfloating):
+
+    if PETSC_AVAILABLE and issubclass(PETSc.ScalarType, np.complexfloating):
         logger.debug("JAX Solver - Using PETSc with complex number support")
         A = A.astype(complex)
         b = b.astype(complex)
@@ -73,6 +156,12 @@ def umfpack_solve(A, b):
     return x
 
 def petsc_solve(A, b, ksp_type, pc_type):
+    if not PETSC_AVAILABLE:
+        raise ImportError(
+            "The 'petsc_solver' backend requires petsc4py, which is not installed. "
+            "Install it (e.g. `conda install -c conda-forge petsc4py`) or switch to "
+            "'umfpack_solver' (scipy direct) or 'jax_solver'."
+        )
     rhs = PETSc.Vec().createSeq(len(b))
     rhs.setValues(range(len(b)), onp.array(b))
     ksp = PETSc.KSP().create()
@@ -368,10 +457,8 @@ def get_A(problem):
         shape=(problem.num_total_dofs_all_vars, problem.num_total_dofs_all_vars))
     # logger.info(f"Global sparse matrix takes about {A_sp_scipy.data.shape[0]*8*3/2**30} G memory to store.")
 
-    A = PETSc.Mat().createAIJ(size=A_sp_scipy.shape, 
-                              csr=(A_sp_scipy.indptr.astype(PETSc.IntType, copy=False),
-                                   A_sp_scipy.indices.astype(PETSc.IntType, copy=False), 
-                                   A_sp_scipy.data))
+    A = new_sparse_mat(A_sp_scipy.shape,
+                       (A_sp_scipy.indptr, A_sp_scipy.indices, A_sp_scipy.data))
 
     for ind, fe in enumerate(problem.fes):
         for i in range(len(fe.node_inds_list)):
@@ -380,8 +467,8 @@ def get_A(problem):
 
     # Linear multipoint constraints
     if hasattr(problem, 'P_mat'):
-        P = PETSc.Mat().createAIJ(size=problem.P_mat.shape, csr=(problem.P_mat.indptr.astype(PETSc.IntType, copy=False),
-                                                   problem.P_mat.indices.astype(PETSc.IntType, copy=False), problem.P_mat.data))
+        P = new_sparse_mat(problem.P_mat.shape,
+                           (problem.P_mat.indptr, problem.P_mat.indices, problem.P_mat.data))
 
         tmp = A.matMult(P)
         P_T = P.transpose()

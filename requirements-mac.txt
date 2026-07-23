@@ -1,0 +1,31 @@
+# JAX-FEM4Geo dependencies (macOS / CPU-only, PETSc-free)
+# Tested on macOS arm64 with Python 3.11
+#
+# Install:
+#   uv venv --python 3.11 .venv
+#   source .venv/bin/activate
+#   uv pip install -r requirements-mac.txt
+#   uv pip install -e jax-fem-main/
+#
+# NOTE: This project ships a patched jax-fem (see jax-fem-main/jax_fem/solver.py)
+# that makes PETSc optional. On Linux/GPU you may instead install petsc4py and use
+# the 'petsc_solver' backend for better performance on large problems.
+
+# Differentiable FEM core (CPU build of JAX — no CUDA on Mac)
+jax[cpu]==0.10.2
+
+# Scientific stack
+numpy==2.4.6
+scipy==1.17.1
+matplotlib==3.11.1
+
+# Mesh
+meshio==5.3.5
+gmsh==4.15.2
+fenics-basix==0.11.0
+
+# Misc (required by jax-fem banner)
+pyfiglet==1.0.4
+
+# Optimization (for parameter inversion)
+# Installed on demand when running the inversion scripts.

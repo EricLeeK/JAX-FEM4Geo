@@ -92,7 +92,7 @@ def run_simulation():
         dirichlet_bc_info[-1][-1] = get_dirichlet_top(disp)
         problem.fe.update_Dirichlet_boundary_conditions(dirichlet_bc_info)
         
-        sol_list = solver(problem, solver_options={'petsc_solver': {}}) 
+        sol_list = solver(problem, solver_options={'umfpack_solver': {}})
         problem.update_stress_strain(sol_list[0])
         
         avg_stress = problem.compute_avg_stress()

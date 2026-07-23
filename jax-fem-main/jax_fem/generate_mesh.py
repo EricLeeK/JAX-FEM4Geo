@@ -1,5 +1,4 @@
 import os
-import gmsh
 import numpy as onp
 import meshio
 
@@ -235,6 +234,7 @@ def box_mesh_gmsh(Nx, Ny, Nz, domain_x, domain_y, domain_z, data_dir, ele_type='
     offset_y = 0.
     offset_z = 0.
 
+    import gmsh  # lazy import: gmsh requires libGLU; defer until actually generating a mesh
     gmsh.initialize()
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)  # save in old MSH format
     if cell_type.startswith('tetra'):

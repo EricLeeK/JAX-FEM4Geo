@@ -1,0 +1,33 @@
+{
+  "truth": {
+    "E": 70000.0,
+    "k": 250.0
+  },
+  "start": {
+    "E": 50000.0,
+    "k": 180.0
+  },
+  "gradient_norm_at_start": {
+    "reaction": 1373.1689249044136,
+    "displacement": 0.08761149832259972
+  },
+  "recovery": {
+    "reaction": {
+      "E": 70000.00000346568,
+      "k": 249.9999994548331,
+      "errE_pct": 4.950977329696927e-09,
+      "errk_pct": 2.1806675931657082e-07,
+      "iters": 12,
+      "optimizer": "L-BFGS"
+    },
+    "displacement": {
+      "E": 335734.6205545045,
+      "k": 1007006.8226854918,
+      "errE_pct": 379.620886506435,
+      "errk_pct": 402702.7290741967,
+      "iters": 30,
+      "optimizer": "Adam"
+    }
+  },
+  "conclusion": "reaction loss is the correct observable under displacement control"
+}

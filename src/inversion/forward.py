@@ -41,7 +41,8 @@ if jax_fem_path not in sys.path:
     sys.path.append(jax_fem_path)
 
 from jax_fem.solver import solver
-from jax_fem.generate_mesh import box_mesh_gmsh, get_meshio_cell_type, Mesh
+from jax_fem.generate_mesh import (
+    box_mesh_gmsh, cylinder_mesh_gmsh, get_meshio_cell_type, Mesh)
 
 from src.models.differentiable_dp import DifferentiableDruckerPrager
 
@@ -92,6 +93,57 @@ class TriaxialForwardProblem(DifferentiableDruckerPrager):
         ]
 
 
+class CylindricalTriaxialForwardProblem(DifferentiableDruckerPrager):
+    """Triaxial BVP on a CYLINDRICAL specimen (real triaxial geometry).
+
+    Same loading concept as the box version (confining pressure + axial
+    compression) but on a cylinder: the lateral confining pressure acts on the
+    single curved side surface and points in the outward RADIAL direction
+    (which varies with position around the circumference), and the top/bottom
+    caps take the axial Dirichlet BC.
+
+    Use ``make_cylinder_mesh`` to build the mesh. The cylinder axis is z.
+    """
+
+    def __init__(self, mesh, confining_p, axial_disp, R,
+                 nu=0.3, alpha=0.3):
+        self.confining_p = confining_p
+        self.axial_disp = axial_disp
+        self.R = R
+        Lz = float(np.max(mesh.points[:, 2]))
+
+        def bottom(p): return np.isclose(p[2], 0., atol=1e-5)
+        def top(p): return np.isclose(p[2], Lz, atol=1e-5)
+        # Lateral curved surface: points at radius ~ R (allow mesh tolerance).
+        def lateral(p): return np.isclose(np.sqrt(p[0]**2 + p[1]**2), R, atol=1e-3)
+
+        dirichlet_bc_info = [[bottom, top], [2, 2],
+                             [lambda p: 0., lambda p: axial_disp]]
+        location_fns = [lateral]
+        super().__init__(mesh, vec=3, dim=3,
+                         dirichlet_bc_info=dirichlet_bc_info,
+                         location_fns=location_fns, nu=nu, alpha=alpha)
+
+    def get_surface_maps(self):
+        """Confining pressure on the curved lateral surface, radial outward.
+
+        The traction at a surface point (x, y, z) is p * (x, y, 0)/R, i.e.
+        magnitude p in the outward radial direction. This is the physically
+        correct confining pressure for a cylinder (unlike the box, where each
+        face has a fixed normal).
+        """
+        p = self.confining_p
+        R = self.R
+
+        def lateral_traction(u, x, *a):
+            r = np.sqrt(x[0]**2 + x[1]**2)
+            # Outward unit radial normal; guard against r=0 (never on the
+            # surface, but keeps AD safe).
+            n = np.where(r > 0., x[0] / r, 0.), np.where(r > 0., x[1] / r, 0.), 0.
+            return np.array([p * n[0], p * n[1], n[2]])
+        return [lateral_traction]
+
+
 def make_box_mesh(Nx=2, Ny=2, Nz=2, Lx=10., Ly=10., Lz=10., data_dir=None):
     """Build a HEX8 box mesh. Returns the jax-fem ``Mesh``."""
     if data_dir is None:
@@ -99,6 +151,23 @@ def make_box_mesh(Nx=2, Ny=2, Nz=2, Lx=10., Ly=10., Lz=10., data_dir=None):
     os.makedirs(data_dir, exist_ok=True)
     mm = box_mesh_gmsh(Nx=Nx, Ny=Ny, Nz=Nz, domain_x=Lx, domain_y=Ly, domain_z=Lz,
                        data_dir=data_dir, ele_type='HEX8')
+    return Mesh(mm.points, mm.cells_dict[get_meshio_cell_type('HEX8')])
+
+
+def make_cylinder_mesh(R=5., H=10., circle_mesh=6, height_mesh=10,
+                       data_dir=None):
+    """Build a structured HEX cylinder mesh (the real triaxial specimen shape).
+
+    A box/cube is a fine demo geometry, but real triaxial tests use cylindrical
+    specimens. This wraps jax-fem's ``cylinder_mesh_gmsh`` (transfinite extruded
+    mesh: a square core + 4 arc segments per layer, extruded along the axis).
+    The cylinder axis is z, height H along z, radius R in the xy-plane.
+    """
+    if data_dir is None:
+        data_dir = os.path.join(project_root, 'results', '_mesh_tmp')
+    os.makedirs(data_dir, exist_ok=True)
+    mm = cylinder_mesh_gmsh(data_dir=data_dir, R=R, H=H,
+                            circle_mesh=circle_mesh, hight_mesh=height_mesh)
     return Mesh(mm.points, mm.cells_dict[get_meshio_cell_type('HEX8')])
 
 

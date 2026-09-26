@@ -1,4 +1,12 @@
-# FEM-JAX-GEO: Differentiable Geomechanics with JAX-FEM
+<p align="center">
+  <img src="./assets/readme/hero.gif" width="100%" alt="Differentiable geomechanics: Drucker–Prager plasticity with JAX-FEM. Conceptual overview.">
+</p>
+
+# JAX-FEM4Geo
+
+Differentiable geomechanics with JAX-FEM: constitutive models, finite element simulations, and gradient checks.
+
+**Start with:** [material model](src/models/drucker_prager.py) · [single-point driver](examples/run_constitutive_driver.py) · [finite element example](examples/run_fem_simulation.py)
 
 ## Project Overview
 This project implements constitutive models (specifically Drucker-Prager plasticity) and finite element simulations using the `jax-fem` library. It focuses on differentiability for gradient-based optimization in geomechanics.
@@ -43,3 +51,10 @@ python scripts/compare_results.py
 ```bash
 python tests/test_diff_dp.py
 ```
+
+<details>
+<summary>Static overview</summary>
+
+[Open the static SVG](./assets/readme/hero.svg).
+
+</details>

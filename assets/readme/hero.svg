@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title desc">
+  <title id="title">JAX-FEM4Geo</title>
+  <desc id="desc">Differentiable geomechanics: Drucker–Prager plasticity with JAX-FEM. The diagram is a conceptual illustration, not a benchmark or application screenshot.</desc>
+  <defs>
+    <clipPath id="frame">
+      <rect width="1200" height="440" rx="24" />
+    </clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect x="0" y="0" width="1200" height="440" rx="24" fill="#101b2b" />
+    <text x="60" y="72" font-family="'SFMono-Regular',Menlo,monospace" font-size="18" font-weight="600" fill="#70c5cf" text-anchor="start">DIFFERENTIABLE GEOMECHANICS</text>
+    <text x="60" y="166" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="74" font-weight="700" fill="#f1f4f8" text-anchor="start">JAX-FEM</text>
+    <text x="60" y="244" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="74" font-weight="700" fill="#f1f4f8" text-anchor="start">4Geo</text>
+    <text x="60" y="298" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="26" font-weight="400" fill="#f1f4f8" text-anchor="start">Constitutive models.</text>
+    <text x="60" y="333" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="26" font-weight="400" fill="#f1f4f8" text-anchor="start">Finite elements. Gradients.</text>
+    <text x="60" y="400" font-family="'SFMono-Regular',Menlo,monospace" font-size="18" font-weight="600" fill="#70c5cf" text-anchor="start">JAX  /  DRUCKER–PRAGER PLASTICITY</text>
+    <path d="M745 110 H975 L1100 56" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 152 H975 L1100 98" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 194 H975 L1100 140" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 236 H975 L1100 182" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 278 H975 L1100 224" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 320 H975 L1100 266" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 110V320 M745 110l125 -54" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M791 110V320 M791 110l125 -54" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M837 110V320 M837 110l125 -54" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M883 110V320 M883 110l125 -54" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M929 110V320 M929 110l125 -54" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M975 110V320 M975 110l125 -54" fill="none" stroke="#416275" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M745 110L870 56H1100V266L975 320H745Z M975 110V320 M1100 56L975 110" fill="none" stroke="#c1e2e8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="746" y="408" font-family="'SFMono-Regular',Menlo,monospace" font-size="18" font-weight="600" fill="#a5b5c8" text-anchor="start">FINITE ELEMENT MESH</text>
+    <g id="load">
+      <path d="M825 43 L825 94" fill="none" stroke="#70c5cf" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M819.8 85.5 L825 94 L830.2 85.5" fill="none" stroke="#70c5cf" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M901 43 L901 94" fill="none" stroke="#70c5cf" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M895.8 85.5 L901 94 L906.2 85.5" fill="none" stroke="#70c5cf" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+    <g id="material">
+      <rect x="663" y="208" width="212" height="91" rx="9" fill="#eff4f4" />
+      <text x="684" y="242" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="22" font-weight="650" fill="#101b2b" text-anchor="start">Drucker–Prager</text>
+      <text x="684" y="276" font-family="Georgia,'Songti SC',serif" font-size="26" font-weight="500" fill="#194d63" text-anchor="start">σ = f(ε)</text>
+    </g>
+    <g id="gradient">
+      <rect x="931" y="317" width="207" height="70" rx="9" fill="#70c5cf" />
+      <text x="952" y="360" font-family="Georgia,'Songti SC',serif" font-size="32" font-weight="600" fill="#10212c" text-anchor="start">∂σ / ∂ε</text>
+    </g>
+  </g>
+</svg>

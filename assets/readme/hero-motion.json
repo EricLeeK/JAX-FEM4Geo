@@ -1,0 +1,69 @@
+{
+  "width": 1200,
+  "fps": 30,
+  "duration": 5.2,
+  "colors": 256,
+  "dither": "none",
+  "clip_to_base_alpha": true,
+  "max_size_mb": 2.0,
+  "layers": [
+    {
+      "id": "load",
+      "enter": {
+        "start": 0.15,
+        "end": 1.1,
+        "from": [
+          0,
+          -22
+        ]
+      },
+      "exit": {
+        "start": 4.35,
+        "end": 5.16,
+        "to": [
+          0,
+          -12
+        ]
+      }
+    },
+    {
+      "id": "material",
+      "enter": {
+        "start": 0.43,
+        "end": 1.38,
+        "from": [
+          -24,
+          0
+        ]
+      },
+      "exit": {
+        "start": 4.35,
+        "end": 5.16,
+        "to": [
+          0,
+          -12
+        ]
+      }
+    },
+    {
+      "id": "gradient",
+      "enter": {
+        "start": 0.71,
+        "end": 1.66,
+        "from": [
+          16,
+          20
+        ]
+      },
+      "exit": {
+        "start": 4.35,
+        "end": 5.16,
+        "to": [
+          0,
+          -12
+        ]
+      }
+    }
+  ],
+  "reveals": []
+}
